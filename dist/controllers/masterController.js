@@ -227,10 +227,12 @@ const saveUserFamily = async (req, res) => {
                     ...userData
                 }, { transaction });
             }
+            console.log('--- DEBUG USER createdAt ---', userData.createdAt);
             if (userData.createdAt) {
                 user.setDataValue('createdAt', new Date(userData.createdAt));
                 user.changed('createdAt', true);
                 await user.save({ transaction });
+                console.log('--- USER CREATED AT UPDATED ---', user.getDataValue('createdAt'));
             }
             // Process roles
             if (roles && Array.isArray(roles)) {

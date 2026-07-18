@@ -232,11 +232,12 @@ export const saveUserFamily = async (req: Request, res: Response): Promise<void>
           ...userData
         }, { transaction });
       }
-
+      console.log('--- DEBUG USER createdAt ---', userData.createdAt);
       if (userData.createdAt) {
         (user as any).setDataValue('createdAt', new Date(userData.createdAt as string));
         (user as any).changed('createdAt', true);
         await user.save({ transaction });
+        console.log('--- USER CREATED AT UPDATED ---', user.getDataValue('createdAt'));
       }
 
       // Process roles

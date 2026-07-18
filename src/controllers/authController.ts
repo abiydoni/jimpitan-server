@@ -8,7 +8,7 @@ const PROFILE_FIELDS = [
   'name', 'photoUrl', 'foto', 'status', 'villageId', 'phoneNumber',
   'agama', 'pekerjaan', 'nik', 'noKK', 'jenisKelamin', 'tempatLahir',
   'tanggalLahir', 'statusHubungan', 'statusPerkawinan', 'statusHidup',
-  'alamat', 'uniqueCode', 'familyId',
+  'alamat', 'uniqueCode', 'familyId', 'createdAt',
 ] as const;
 
 const pickProfileFields = (body: Record<string, unknown>) => {
@@ -214,6 +214,11 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
     const updateData = pickProfileFields(req.body);
     if (Object.keys(updateData).length > 0) {
       await user.update(updateData);
+    }
+    if (updateData.createdAt) {
+      (user as any).setDataValue('createdAt', new Date(updateData.createdAt as string));
+      (user as any).changed('createdAt', true);
+      await user.save();
     }
 
     if (roles && Array.isArray(roles) && villageId) {
