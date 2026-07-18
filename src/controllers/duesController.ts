@@ -90,6 +90,11 @@ export const getTariffs = async (req: Request, res: Response): Promise<void> => 
 export const createTariff = async (req: Request, res: Response): Promise<void> => {
   try {
     const tariff = await Tariff.create(req.body);
+    if (req.body.createdAt) {
+      (tariff as any).setDataValue('createdAt', new Date(req.body.createdAt));
+      (tariff as any).changed('createdAt', true);
+      await tariff.save();
+    }
     await sendSyncNotification(req.body.villageId, 'REFRESH_TARIFFS');
     res.status(201).json({ success: true, data: tariff });
   } catch (error: any) {
@@ -105,6 +110,12 @@ export const updateTariff = async (req: Request, res: Response): Promise<void> =
       res.status(404).json({ success: false, message: 'Tariff not found' });
       return;
     }
+
+    if (req.body.createdAt) {
+      (tariff as any).setDataValue('createdAt', new Date(req.body.createdAt));
+      (tariff as any).changed('createdAt', true);
+    }
+
     await tariff.update(req.body);
     await sendSyncNotification((tariff as any).villageId, 'REFRESH_TARIFFS');
     res.json({ success: true, data: tariff });
