@@ -21,6 +21,7 @@ router.post('/users/bulk-import', masterController_1.bulkImportUsers);
 router.delete('/users/family/:familyId', masterController_1.deleteUserFamily);
 router.put('/users/:uid/fcm-token', masterController_1.updateFcmToken);
 router.delete('/users/:uid/fcm-token', masterController_1.removeFcmToken);
+router.put('/users/:uid/online-status', masterController_1.updateOnlineStatus);
 // Menus
 router.get('/menus', masterController_1.getMenus);
 router.put('/menus/:id', masterController_1.updateMenu);

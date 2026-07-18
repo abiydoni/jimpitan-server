@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.bulkImportUsers = exports.removeFcmToken = exports.updateFcmToken = exports.deleteSlide = exports.updateSlide = exports.createSlide = exports.getSlides = exports.deleteMenu = exports.updateMenu = exports.getMenus = exports.updateUserStatus = exports.getUserById = exports.saveUserFamily = exports.deleteUserFamily = exports.getUsers = exports.registerVillage = exports.deleteVillage = exports.updateVillage = exports.createVillage = exports.getVillageById = exports.getVillages = void 0;
+exports.bulkImportUsers = exports.updateOnlineStatus = exports.removeFcmToken = exports.updateFcmToken = exports.deleteSlide = exports.updateSlide = exports.createSlide = exports.getSlides = exports.deleteMenu = exports.updateMenu = exports.getMenus = exports.updateUserStatus = exports.getUserById = exports.saveUserFamily = exports.deleteUserFamily = exports.getUsers = exports.registerVillage = exports.deleteVillage = exports.updateVillage = exports.createVillage = exports.getVillageById = exports.getVillages = void 0;
 const models_1 = require("../models");
 const uuid_1 = require("uuid");
 // Villages
@@ -403,7 +403,12 @@ exports.deleteSlide = deleteSlide;
 const updateFcmToken = async (req, res) => {
     try {
         const { uid } = req.params;
-        const { fcmToken } = req.body;
+        // Support both 'token' and 'fcmToken' field names from Flutter
+        const fcmToken = req.body.token ?? req.body.fcmToken;
+        if (!fcmToken) {
+            res.status(400).json({ success: false, message: 'token is required' });
+            return;
+        }
         await models_1.User.update({ fcmToken }, { where: { uid } });
         res.json({ success: true });
     }
@@ -423,6 +428,22 @@ const removeFcmToken = async (req, res) => {
     }
 };
 exports.removeFcmToken = removeFcmToken;
+const updateOnlineStatus = async (req, res) => {
+    try {
+        const { uid } = req.params;
+        const { isOnline } = req.body;
+        const updateData = { isOnline: !!isOnline };
+        if (!isOnline) {
+            updateData.lastSeen = new Date();
+        }
+        await models_1.User.update(updateData, { where: { uid } });
+        res.json({ success: true });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+exports.updateOnlineStatus = updateOnlineStatus;
 const bulkImportUsers = async (req, res) => {
     const transaction = await models_1.sequelize.transaction();
     try {

@@ -8,8 +8,10 @@ const sequelize_1 = require("sequelize");
 const dotenv_1 = __importDefault(require("dotenv"));
 const startupLogs_1 = require("../utils/startupLogs");
 dotenv_1.default.config();
-// Mengambil URL dari .env
-const dbUrl = process.env.DATABASE_URL || "mysql://appsbeem_admin:A7by777__@localhost:3306/appsbeem_jimpitan_admin";
+const dbUrl = process.env.DATABASE_URL;
+if (!dbUrl) {
+    throw new Error('DATABASE_URL belum di-set di file .env');
+}
 exports.sequelize = new sequelize_1.Sequelize(dbUrl, {
     dialect: 'mysql',
     logging: false, // Ubah ke console.log untuk melihat log query SQL di terminal

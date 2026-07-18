@@ -62,6 +62,8 @@ class User extends sequelize_1.Model {
     alamat;
     uniqueCode;
     fcmToken;
+    isOnline;
+    lastSeen;
 }
 exports.User = User;
 User.init({
@@ -87,6 +89,8 @@ User.init({
     alamat: { type: sequelize_1.DataTypes.TEXT, allowNull: true },
     uniqueCode: { type: sequelize_1.DataTypes.STRING(50), allowNull: true },
     fcmToken: { type: sequelize_1.DataTypes.TEXT, allowNull: true },
+    isOnline: { type: sequelize_1.DataTypes.BOOLEAN, defaultValue: false },
+    lastSeen: { type: sequelize_1.DataTypes.DATE, allowNull: true },
 }, { sequelize: database_1.sequelize, modelName: 'user', tableName: 'users', timestamps: true });
 // ---------------------------
 // 3. Model Role (Jabatan)

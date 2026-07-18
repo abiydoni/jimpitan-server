@@ -2,19 +2,14 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const authController_1 = require("../controllers/authController");
+const authMiddleware_1 = require("../middlewares/authMiddleware");
 const router = (0, express_1.Router)();
-// /api/auth/register
-router.post('/register', authController_1.registerUser);
-// /api/auth/sync/:uid
-router.get('/sync/:uid', authController_1.syncUser);
-// /api/auth/login-sync
-router.post('/login-sync', authController_1.loginSync);
-// /api/auth/claim-account
-router.post('/claim-account', authController_1.claimAccount);
-// /api/auth/profile/:uid
-router.put('/profile/:uid', authController_1.updateProfile);
-// /api/auth/village/:code
+router.use(authMiddleware_1.verifyFirebaseToken);
+router.post('/register', (0, authMiddleware_1.requireSelf)('uid'), authController_1.registerUser);
+router.get('/sync/:uid', (0, authMiddleware_1.requireSelf)('uid'), authController_1.syncUser);
+router.post('/login-sync', (0, authMiddleware_1.requireSelf)('uid'), authController_1.loginSync);
+router.post('/claim-account', (0, authMiddleware_1.requireSelf)('uid'), authController_1.claimAccount);
+router.put('/profile/:uid', (0, authMiddleware_1.requireSelf)('uid'), authController_1.updateProfile);
 router.get('/village/:code', authController_1.checkVillageCode);
-// /api/auth/users/:villageId
-router.get('/users/:villageId', authController_1.getUsersByVillage);
+router.get('/users/:villageId', (0, authMiddleware_1.requireSelfOrSuperAdmin)('uid'), authController_1.getUsersByVillage);
 exports.default = router;

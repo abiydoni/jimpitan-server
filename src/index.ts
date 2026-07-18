@@ -33,7 +33,7 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Endpoint untuk melayani Halaman Server Control Panel
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'views', 'monitor.html'));
+  res.sendFile(path.join(__dirname, '../src/views/monitor.html'));
 });
 
 // ==========================================

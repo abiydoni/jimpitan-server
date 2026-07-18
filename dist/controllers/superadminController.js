@@ -49,11 +49,11 @@ const updateFcmToken = async (req, res) => {
     try {
         const { token } = req.body;
         // Simpan token superadmin ke tabel User dengan uid khusus
-        let superadmin = await models_1.User.findByPk('SUPERADMIN_WEB');
+        let superadmin = await models_1.User.findByPk('SUPER_ADMIN');
         if (!superadmin) {
             superadmin = await models_1.User.create({
-                uid: 'SUPERADMIN_WEB',
-                name: 'Super Admin Pusat',
+                uid: 'SUPER_ADMIN',
+                name: 'Appsbee Support',
                 email: 'superadmin@jimpitan.local',
                 status: 'ACTIVE'
             });

@@ -1,7 +1,69 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.claimAccount = exports.getUsersByVillage = exports.checkVillageCode = exports.updateProfile = exports.syncUser = exports.loginSync = exports.registerUser = void 0;
 const models_1 = require("../models");
+const superAdminEmail = () => process.env.SUPERADMIN_EMAIL || 'appsbeem@gmail.com';
+const PROFILE_FIELDS = [
+    'name', 'photoUrl', 'foto', 'status', 'villageId', 'phoneNumber',
+    'agama', 'pekerjaan', 'nik', 'noKK', 'jenisKelamin', 'tempatLahir',
+    'tanggalLahir', 'statusHubungan', 'statusPerkawinan', 'statusHidup',
+    'alamat', 'uniqueCode', 'familyId',
+];
+const pickProfileFields = (body) => {
+    const data = {};
+    for (const field of PROFILE_FIELDS) {
+        if (body[field] !== undefined) {
+            data[field] = body[field];
+        }
+    }
+    return data;
+};
+const assignRoles = async (uid, roles, villageId) => {
+    const uniqueRoles = roles.filter((val, idx, arr) => arr.indexOf(val) === idx);
+    await models_1.Role.destroy({ where: { userId: uid, villageId } });
+    for (let index = 0; index < uniqueRoles.length; index++) {
+        const roleName = uniqueRoles[index];
+        await models_1.Role.create({
+            id: `role_${uid}_${roleName}_${Date.now()}_${index}`,
+            name: roleName,
+            userId: uid,
+            villageId,
+        });
+    }
+};
+const formatUserWithRoles = (user) => {
+    const userJSON = user.toJSON();
+    const roles = userJSON.roles;
+    if (roles) {
+        userJSON.roles = roles
+            .map((r) => r.name)
+            .filter((val, idx, arr) => arr.indexOf(val) === idx);
+    }
+    return userJSON;
+};
 /**
  * Registrasi User Baru
  * POST /api/auth/register
@@ -13,33 +75,25 @@ const registerUser = async (req, res) => {
             res.status(400).json({ success: false, message: 'UID, Name, and Email are required' });
             return;
         }
-        // 1. Cek apakah user sudah ada
         const existingUser = await models_1.User.findByPk(uid);
         if (existingUser) {
             res.status(400).json({ success: false, message: 'User already exists' });
             return;
         }
-        // 2. Buat User
         const newUser = await models_1.User.create({
             uid,
             name,
             email,
             photoUrl,
             status: status || 'INCOMPLETE',
-            villageId: villageId || null
+            villageId: villageId || null,
         });
-        // 3. Tambahkan Role bawaan (WARGA) jika villageId disertakan
         if (villageId) {
-            // Cari atau buat role WARGA
-            const [role] = await models_1.Role.findOrCreate({
-                where: { name: 'WARGA', villageId },
-                defaults: { id: `role_${villageId}_WARGA`, name: 'WARGA', villageId }
-            });
-            // Pasangkan user dengan role
-            await models_1.UserRole.create({
+            await models_1.Role.create({
+                id: `role_${uid}_WARGA_${Date.now()}`,
+                name: 'WARGA',
                 userId: uid,
-                roleId: role.dataValues.id,
-                villageId
+                villageId,
             });
         }
         res.status(201).json({ success: true, message: 'User registered successfully', data: newUser });
@@ -52,24 +106,26 @@ exports.registerUser = registerUser;
 const loginSync = async (req, res) => {
     try {
         const { uid, email, name, photoUrl } = req.body;
+        const firebaseUser = req.firebaseUser;
         if (!uid || !email) {
             res.status(400).json({ success: false, message: 'UID and Email are required' });
             return;
         }
+        if (firebaseUser && firebaseUser.uid !== uid) {
+            res.status(403).json({ success: false, message: 'UID tidak sesuai dengan token autentikasi' });
+            return;
+        }
         let user = await models_1.User.findByPk(uid);
         if (!user) {
-            // Cari apakah ada user dengan email tersebut (didaftarkan admin sebelumnya)
             const existingUser = await models_1.User.findOne({ where: { email } });
             if (existingUser) {
                 const oldUid = existingUser.getDataValue('uid');
-                // Manual cascade update for roles and chat_messages
                 if (oldUid !== uid) {
-                    const { Role, ChatMessage } = require('../models');
-                    await Role.update({ userId: uid }, { where: { userId: oldUid } });
+                    const { ChatMessage } = await Promise.resolve().then(() => __importStar(require('../models')));
+                    await models_1.Role.update({ userId: uid }, { where: { userId: oldUid } });
                     await ChatMessage.update({ senderUid: uid }, { where: { senderUid: oldUid } });
                     await ChatMessage.update({ receiverUid: uid }, { where: { receiverUid: oldUid } });
                 }
-                // Update user lama dengan UID baru dari firebase menggunakan update statis (karena primary key tidak bisa di-update via instance)
                 await models_1.User.update({
                     uid,
                     photoUrl: photoUrl || existingUser.getDataValue('photoUrl'),
@@ -77,27 +133,40 @@ const loginSync = async (req, res) => {
                 user = await models_1.User.findByPk(uid);
             }
             else {
-                // Buat user baru
-                let roles = [];
                 let status = 'INCOMPLETE';
-                if (email === 'appsbeem@gmail.com') {
+                if (email === superAdminEmail()) {
                     status = 'ACTIVE';
-                    // Kita anggap role SUPER_ADMIN akan dibuat saat join village, atau biarkan kosong tapi punya hardcode check
                 }
                 user = await models_1.User.create({
                     uid,
-                    name: name || (email === 'appsbeem@gmail.com' ? 'Superadmin appsbee' : ''),
+                    name: name || (email === superAdminEmail() ? 'Superadmin appsbee' : ''),
                     email,
                     photoUrl: photoUrl || '',
                     status,
                 });
-                if (email === 'appsbeem@gmail.com') {
-                    // Assign Super Admin if needed. We can just create a global SUPER_ADMIN role or handle it on frontend.
-                    // For now, frontend handles SUPER_ADMIN manually or checks the email.
+                if (email === superAdminEmail()) {
+                    const existingRole = await models_1.Role.findOne({ where: { userId: uid, name: 'SUPER_ADMIN' } });
+                    if (!existingRole) {
+                        await models_1.Role.create({
+                            id: `role_${uid}_SUPER_ADMIN`,
+                            name: 'SUPER_ADMIN',
+                            userId: uid,
+                            villageId: null,
+                        });
+                    }
                 }
             }
         }
-        res.status(200).json({ success: true, data: user });
+        const userWithRoles = await models_1.User.findByPk(uid, {
+            include: [
+                { model: models_1.Role, as: 'roles', attributes: ['id', 'name', 'villageId'] },
+                { model: models_1.Village },
+            ],
+        });
+        res.status(200).json({
+            success: true,
+            data: userWithRoles ? formatUserWithRoles(userWithRoles) : user,
+        });
     }
     catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -113,20 +182,15 @@ const syncUser = async (req, res) => {
         const { uid } = req.params;
         const user = await models_1.User.findByPk(uid, {
             include: [
-                {
-                    model: models_1.Role,
-                    through: { attributes: [] } // Tidak menampilkan data tabel pivot (user_roles)
-                },
-                {
-                    model: models_1.Village
-                }
-            ]
+                { model: models_1.Role, as: 'roles', attributes: ['id', 'name', 'villageId'] },
+                { model: models_1.Village },
+            ],
         });
         if (!user) {
             res.status(404).json({ success: false, message: 'User not found' });
             return;
         }
-        res.status(200).json({ success: true, data: user });
+        res.status(200).json({ success: true, data: formatUserWithRoles(user) });
     }
     catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -140,26 +204,29 @@ exports.syncUser = syncUser;
 const updateProfile = async (req, res) => {
     try {
         const { uid } = req.params;
-        const { name, photoUrl, foto, status, villageId, phoneNumber, agama, pekerjaan, roles, nik, noKK } = req.body;
+        const { roles, villageId } = req.body;
         const user = await models_1.User.findByPk(uid);
         if (!user) {
             res.status(404).json({ success: false, message: 'User not found' });
             return;
         }
-        await user.update(req.body);
-        // Update roles if provided
-        if (roles && Array.isArray(roles) && villageId) {
-            for (const roleName of roles) {
-                const [role] = await models_1.Role.findOrCreate({
-                    where: { name: roleName, villageId },
-                    defaults: { id: `role_${villageId}_${roleName}`, name: roleName, villageId }
-                });
-                await models_1.UserRole.findOrCreate({
-                    where: { userId: uid, roleId: role.dataValues.id, villageId }
-                });
-            }
+        const updateData = pickProfileFields(req.body);
+        if (Object.keys(updateData).length > 0) {
+            await user.update(updateData);
         }
-        res.status(200).json({ success: true, message: 'Profile updated successfully', data: user });
+        if (roles && Array.isArray(roles) && villageId) {
+            await assignRoles(uid, roles, villageId);
+        }
+        const updatedUser = await models_1.User.findByPk(uid, {
+            include: [
+                { model: models_1.Role, as: 'roles', attributes: ['id', 'name', 'villageId'] },
+            ],
+        });
+        res.status(200).json({
+            success: true,
+            message: 'Profile updated successfully',
+            data: updatedUser ? formatUserWithRoles(updatedUser) : user,
+        });
     }
     catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -169,7 +236,8 @@ exports.updateProfile = updateProfile;
 const checkVillageCode = async (req, res) => {
     try {
         const { code } = req.params;
-        const village = await models_1.Village.findOne({ where: { villageCode: code } });
+        const codeStr = String(code);
+        const village = await models_1.Village.findOne({ where: { uniqueCode: codeStr.toUpperCase() } });
         if (!village) {
             res.status(404).json({ success: false, message: 'Village code not found' });
             return;
@@ -195,49 +263,55 @@ exports.getUsersByVillage = getUsersByVillage;
 const claimAccount = async (req, res) => {
     try {
         const { uid, email, name, nik, villageId } = req.body;
+        const firebaseUser = req.firebaseUser;
         if (!uid || !email || !nik || !villageId) {
             res.status(400).json({ success: false, message: 'Missing required fields' });
             return;
         }
-        // Cari user asli (input masal) yang punya NIK ini di desa ini
+        if (firebaseUser && firebaseUser.uid !== uid) {
+            res.status(403).json({ success: false, message: 'UID tidak sesuai dengan token autentikasi' });
+            return;
+        }
         const existingBulkUser = await models_1.User.findOne({ where: { nik, villageId } });
         if (!existingBulkUser) {
             res.status(404).json({ success: false, message: 'Data dengan NIK tersebut tidak ditemukan di desa ini' });
             return;
         }
         const oldUid = existingBulkUser.getDataValue('uid');
-        // Jika uid sama (mungkin sudah pernah klaim), tidak perlu ganti PK
         if (oldUid !== uid) {
-            const { Role, ChatMessage } = require('../models');
-            // Pindahkan relasi (Cascade manual)
-            await Role.update({ userId: uid }, { where: { userId: oldUid } });
+            const { ChatMessage } = await Promise.resolve().then(() => __importStar(require('../models')));
+            await models_1.Role.update({ userId: uid }, { where: { userId: oldUid } });
             try {
-                if (ChatMessage) {
-                    await ChatMessage.update({ senderUid: uid }, { where: { senderUid: oldUid } });
-                    await ChatMessage.update({ receiverUid: uid }, { where: { receiverUid: oldUid } });
-                }
+                await ChatMessage.update({ senderUid: uid }, { where: { senderUid: oldUid } });
+                await ChatMessage.update({ receiverUid: uid }, { where: { receiverUid: oldUid } });
             }
-            catch (e) {
+            catch {
                 // Abaikan jika model ChatMessage belum terdefinisi atau ada error
             }
-            // Hapus temporary user yang dibuat oleh loginSync (jika ada)
             const tempUser = await models_1.User.findByPk(uid);
             if (tempUser) {
                 await models_1.User.destroy({ where: { uid } });
             }
-            // Update bulk user PK menjadi uid firebase
             await models_1.User.update({
                 uid,
                 email,
                 name: name || existingBulkUser.getDataValue('name'),
-                status: 'ACTIVE'
+                status: 'ACTIVE',
             }, { where: { uid: oldUid } });
         }
         else {
             await models_1.User.update({ email, status: 'ACTIVE' }, { where: { uid } });
         }
-        const claimedUser = await models_1.User.findByPk(uid);
-        res.json({ success: true, message: 'Account successfully claimed', data: claimedUser });
+        const claimedUser = await models_1.User.findByPk(uid, {
+            include: [
+                { model: models_1.Role, as: 'roles', attributes: ['id', 'name', 'villageId'] },
+            ],
+        });
+        res.json({
+            success: true,
+            message: 'Account successfully claimed',
+            data: claimedUser ? formatUserWithRoles(claimedUser) : null,
+        });
     }
     catch (error) {
         res.status(500).json({ success: false, message: error.message });

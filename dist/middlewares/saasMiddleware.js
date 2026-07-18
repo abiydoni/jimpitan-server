@@ -22,18 +22,18 @@ const checkSubscription = async (req, res, next) => {
             if (status === 'SUSPENDED') {
                 res.status(403).json({
                     success: false,
+                    code: 'SUBSCRIPTION_SUSPENDED',
                     error: 'FORBIDDEN_SUSPENDED',
                     message: 'Layanan ditangguhkan. Silakan hubungi Pengurus Desa untuk menyelesaikan pembayaran langganan SaaS.'
                 });
                 return;
             }
         }
-        // Jika aktif atau grace period, boleh lanjut
         next();
     }
     catch (error) {
         console.error('Error in SaaS middleware:', error);
-        next();
+        res.status(500).json({ success: false, message: 'Gagal memeriksa status langganan' });
     }
 };
 exports.checkSubscription = checkSubscription;

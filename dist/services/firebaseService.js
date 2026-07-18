@@ -88,9 +88,18 @@ const sendChatNotification = async (receiverToken, senderName, messageText, send
             data: {
                 action: 'OPEN_CHAT',
                 senderUid: senderUid,
+                sender_uid: senderUid, // snake_case fallback
                 senderName: senderName,
+                sender_name: senderName, // snake_case fallback
+                uid: senderUid, // Ditambahkan agar Flutter User.fromJson tidak crash
+                name: senderName, // Ditambahkan agar Flutter User.fromJson tidak crash
+                type: 'chat', // Beberapa implementasi Flutter memeriksa `type`
                 villageId: villageId,
+                village_id: villageId, // snake_case fallback
                 roomId: roomId ?? '',
+                room_id: roomId ?? '', // snake_case fallback
+                id: roomId ?? '', // fallback if they use 'id' for roomId
+                click_action: 'FLUTTER_NOTIFICATION_CLICK',
             },
             android: {
                 priority: 'high',
@@ -98,8 +107,7 @@ const sendChatNotification = async (receiverToken, senderName, messageText, send
                     channelId: 'high_importance_channel', // sama dengan channel ID di Flutter
                     sound: 'default',
                     priority: 'high',
-                    defaultVibrateTimings: true,
-                    clickAction: 'FLUTTER_NOTIFICATION_CLICK',
+                    defaultVibrateTimings: true
                 },
             },
             apns: {

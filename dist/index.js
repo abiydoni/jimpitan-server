@@ -18,6 +18,7 @@ const masterRoutes_1 = __importDefault(require("./routes/masterRoutes"));
 const roleRoutes_1 = __importDefault(require("./routes/roleRoutes"));
 const superadminRoutes_1 = __importDefault(require("./routes/superadminRoutes"));
 const saasRoutes_1 = __importDefault(require("./routes/saasRoutes"));
+const monitorRoutes_1 = __importDefault(require("./routes/monitorRoutes"));
 const path_1 = __importDefault(require("path"));
 const saasJobs_1 = require("./cron/saasJobs");
 const startupLogs_1 = require("./utils/startupLogs");
@@ -29,7 +30,11 @@ const port = process.env.PORT || 3000;
 app.use((0, cors_1.default)());
 app.use(express_1.default.json({ limit: '50mb' })); // Supaya bisa baca request.body JSON ukuran besar (base64)
 app.use(express_1.default.urlencoded({ limit: '50mb', extended: true }));
-app.use(express_1.default.static(path_1.default.join(__dirname, '../public'))); // Melayani file statis Web Dashboard
+// Tampilan web statis sudah dipindah ke jimpitan-server
+// Endpoint untuk melayani Halaman Server Control Panel
+app.get('/', (req, res) => {
+    res.sendFile(path_1.default.join(__dirname, '../src/views/monitor.html'));
+});
 // ==========================================
 // REQUEST LOGGER
 // ==========================================
@@ -50,6 +55,7 @@ app.use('/api/master', masterRoutes_1.default);
 app.use('/api/roles', roleRoutes_1.default);
 app.use('/api/superadmin', superadminRoutes_1.default);
 app.use('/api/saas', saasRoutes_1.default);
+app.use('/api/server', monitorRoutes_1.default);
 // Endpoint sederhana untuk testing (Sekarang dilayani oleh public/index.html)
 // app.get('/', (req, res) => {
 //   res.send('API Jimpitan Backend berjalan normal.');

@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getMenus = exports.getSlides = exports.getDashboardSummary = void 0;
+exports.getSuperAdminSummary = exports.getAdminSummary = exports.getMenus = exports.getSlides = exports.getDashboardSummary = void 0;
+const sequelize_1 = require("sequelize");
 const models_1 = require("../models");
 const getDashboardSummary = async (req, res) => {
     try {
@@ -103,3 +104,94 @@ const getMenus = async (req, res) => {
     }
 };
 exports.getMenus = getMenus;
+const getAdminSummary = async (req, res) => {
+    try {
+        const { villageId } = req.params;
+        // 1. Total Warga (Users) di desa ini
+        const totalUsers = await models_1.User.count({
+            where: { villageId }
+        });
+        // 2. Total Jimpitan Bulan Ini
+        // Menghitung total amountCollected pada bulan dan tahun berjalan
+        const now = new Date();
+        const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+        const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        const jimpitanThisMonth = await models_1.JimpitanHistory.sum('amountCollected', {
+            where: {
+                villageId,
+                date: {
+                    [sequelize_1.Op.between]: [firstDay.toISOString().split('T')[0], lastDay.toISOString().split('T')[0]]
+                }
+            }
+        });
+        // 3. Laporan Menunggu (Dues Pending/Unpaid)
+        // Untuk saat ini kita buat dummy count atau ambil jumlah iuran (DuesJournal) 
+        // dengan type pengeluaran yang butuh approval, dll.
+        // Sementara kita hitung jumlah jurnal iuran bulan ini sebagai metrik aktivitas
+        const recentActivitiesCount = await models_1.DuesJournal.count({
+            where: { villageId }
+        });
+        // 4. Aktivitas Terbaru (5 Jurnal Terakhir)
+        const recentActivities = await models_1.DuesJournal.findAll({
+            where: { villageId },
+            order: [['createdAt', 'DESC']],
+            limit: 5,
+            attributes: ['id', 'amount', 'type', 'journalType', 'description', 'createdAt']
+        });
+        res.json({
+            success: true,
+            data: {
+                totalUsers,
+                totalJimpitan: jimpitanThisMonth || 0,
+                pendingReports: recentActivitiesCount, // Bisa disesuaikan logikanya nanti
+                recentActivities
+            }
+        });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+exports.getAdminSummary = getAdminSummary;
+const getSuperAdminSummary = async (req, res) => {
+    try {
+        // 1. Total Desa
+        const totalVillages = await models_1.Village.count();
+        // 2. Total Seluruh Warga (Users) di sistem
+        const totalUsers = await models_1.User.count();
+        // 3. Total Jimpitan Keseluruhan (Semua Desa)
+        const now = new Date();
+        const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+        const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        const totalJimpitanGlobal = await models_1.JimpitanHistory.sum('amountCollected', {
+            where: {
+                date: {
+                    [sequelize_1.Op.between]: [firstDay.toISOString().split('T')[0], lastDay.toISOString().split('T')[0]]
+                }
+            }
+        });
+        // 4. Aktivitas Terbaru Global
+        const recentActivitiesCount = await models_1.DuesJournal.count();
+        // DuesJournal tidak memiliki relasi desa secara nama di model (tapi punya villageId)
+        // Mari kita join secara manual atau ambil mentahannya
+        const recentActivities = await models_1.DuesJournal.findAll({
+            order: [['createdAt', 'DESC']],
+            limit: 10,
+            attributes: ['id', 'villageId', 'amount', 'type', 'journalType', 'description', 'createdAt']
+        });
+        res.json({
+            success: true,
+            data: {
+                totalVillages,
+                totalUsers,
+                totalJimpitan: totalJimpitanGlobal || 0,
+                pendingReports: recentActivitiesCount,
+                recentActivities
+            }
+        });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+exports.getSuperAdminSummary = getSuperAdminSummary;
