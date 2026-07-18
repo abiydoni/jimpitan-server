@@ -1,0 +1,317 @@
+import { Response } from 'express';
+import { AuthRequest } from '../middlewares/authMiddleware';
+import { User, sequelize, ChatMessage as Message } from '../models'; // Impor ChatMessage sebagai Message
+import { Op } from 'sequelize';
+import { sendChatNotification } from '../services/firebaseService';
+import { v4 as uuidv4 } from 'uuid';
+
+export const sendMessage = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { villageId } = req.params;
+  const { senderUid, receiverUid, roomId, senderName, message } = req.body;
+  const firebaseUser = req.firebaseUser;
+
+  console.log('--- DEBUG SEND MESSAGE ---');
+  console.log('Headers Auth:', req.headers.authorization ? 'Ada' : 'Tidak Ada');
+  console.log('senderUid:', senderUid);
+  console.log('firebaseUser:', firebaseUser);
+  console.log('--------------------------');
+
+  // Izinkan jika ini adalah Super Admin (dari Web Dashboard) atau jika token valid
+  if (senderUid !== 'SUPER_ADMIN' && (!firebaseUser || firebaseUser.uid !== senderUid)) {
+    console.log('Ditolak karena tidak cocok UID atau token kosong');
+    res.status(403).json({ success: false, message: 'Akses ditolak' });
+    return;
+  }
+
+  if (!message || !senderName) {
+    res.status(400).json({ success: false, message: 'Parameter tidak lengkap' });
+    return;
+  }
+
+  try {
+    let actualVillageId = villageId;
+    
+    // Jika Super Admin mengirim pesan global, kita ambil villageId dari receiver
+    if (villageId === 'ALL' && receiverUid) {
+      const receiver = await User.findOne({ where: { uid: receiverUid } });
+      if (receiver) {
+        actualVillageId = receiver.getDataValue('villageId') || 'GLOBAL';
+      }
+    }
+
+    // 1. Simpan pesan ke database
+    await Message.create({
+      id: `msg_${uuidv4()}`,
+      villageId: actualVillageId,
+      senderUid,
+      receiverUid,
+      roomId,
+      message,
+      senderName,
+    });
+
+    // Respon ke client secepatnya, jangan tunggu notifikasi terkirim
+    res.status(201).json({ success: true, message: 'Pesan terkirim' });
+
+    // 2. Kirim notifikasi di background (setelah merespon client)
+    // Ini penting agar aplikasi tidak terasa lambat
+    process.nextTick(async () => {
+      try {
+        if (receiverUid) {
+          // --- LOGIKA UNTUK PERSONAL CHAT ---
+          const receiver = await User.findOne({ where: { uid: receiverUid } });
+          const receiverToken = receiver?.getDataValue('fcmToken');
+
+          if (receiverToken && typeof roomId === 'string') {
+            await sendChatNotification(
+              receiverToken,
+              senderName,
+              message,
+              senderUid,
+              actualVillageId as string,
+              // Untuk personal chat, kita bisa kirim roomId agar di client bisa langsung join
+              roomId as string
+            );
+          }
+        } else if (roomId && typeof roomId === 'string' && roomId.startsWith('GROUP_')) {
+          // --- LOGIKA UNTUK GROUP CHAT ---
+          // Dapatkan semua user dalam desa (kecuali pengirim)
+          // NOTE: Ini bisa dioptimalkan dengan tabel relasi user-group
+          const usersInVillage = await User.findAll({
+            where: {
+              villageId: villageId,
+              uid: { [Op.ne]: senderUid }, // Gunakan Op yang sudah diimpor
+            },
+          });
+
+          const tokens: string[] = usersInVillage
+            .map(user => user.getDataValue('fcmToken'))
+            .filter((token): token is string => !!token);
+
+          if (tokens.length > 0) {
+            // Di sini kita bisa mengirim ke banyak token sekaligus (multicast)
+            // atau mengirim satu per satu. Untuk simpelnya, kita loop.
+            for (const token of tokens) {
+               await sendChatNotification(
+                token,
+                senderName, // atau nama grup
+                `${senderName}: ${message}`, // Tambahkan nama pengirim di pesan grup
+                senderUid,
+                villageId as string,
+                roomId
+              );
+            }
+          }
+        }
+      } catch (notifError) {
+        console.error('Gagal mengirim notifikasi di background:', notifError);
+      }
+    });
+
+  } catch (error: any) {
+    console.error('Error in sendMessage:', error);
+    // Pastikan tidak mengirim respon lagi jika sudah terkirim
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+};
+
+export const getChatContacts = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { villageId } = req.params;
+    
+    // Jika villageId = 'ALL', ambil semua user di sistem (fitur khusus Super Admin)
+    const whereClause: any = { 
+      status: 'ACTIVE'
+    };
+    
+    if (villageId === 'ALL') {
+      whereClause.uid = { [Op.ne]: 'SUPER_ADMIN' }; // Jangan tampilkan Super Admin di daftar kontaknya sendiri
+    } else {
+      whereClause.villageId = villageId;
+      // Untuk Flutter, kita HARUS mengirimkan Super Admin (Appsbee Support) agar Flutter mengenalinya di daftar kontak!
+      // Karena Flutter butuh data kontak ini saat membuka notifikasi atau chat.
+    }
+
+    const users = await User.findAll({
+      where: whereClause,
+      attributes: ['uid', 'name', 'foto', 'isOnline', 'lastSeen'],
+      order: [
+        ['isOnline', 'DESC'], // Online di atas
+        ['lastSeen', 'DESC'] // Yang paling baru aktif di atas
+      ]
+    });
+
+    let groups: any[] = [];
+    if (villageId === 'ALL') {
+      groups.push({
+        uid: 'GROUP_ADMIN_DESA',
+        name: 'Grup Semua Admin Desa',
+        isGroup: true,
+        isOnline: false,
+      });
+    } else {
+      // Jika di desa tertentu, mungkin grup desa tersebut saja
+      const { Village } = require('../models');
+      const village = await Village.findByPk(villageId);
+      if (village) {
+        groups.push({
+          uid: `GROUP_${village.id}`,
+          name: `Grup ${village.name}`,
+          isGroup: true,
+          isOnline: false,
+        });
+      }
+    }
+
+    // Gabungkan Grup di paling atas, disusul users
+    res.json({ success: true, data: [...groups, ...users] });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getMessages = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { villageId, targetUid } = req.params;
+    const { uid, roomId } = req.query;
+
+    if (!uid) {
+      res.status(400).json({ success: false, message: 'UID pengguna diperlukan' });
+      return;
+    }
+
+    let whereClause: any;
+
+    if (roomId && typeof roomId === 'string' && roomId.startsWith('GROUP_')) {
+      // Logika untuk mengambil pesan grup
+      whereClause = { roomId };
+      if (villageId !== 'ALL') whereClause.villageId = villageId;
+    } else {
+      // Logika untuk mengambil pesan personal
+      const personalRoomId = `PERSONAL_${[uid as string, targetUid].sort().join('_')}`;
+      whereClause = {
+        [Op.or]: [
+          { senderUid: uid as string, receiverUid: targetUid },
+          { senderUid: targetUid, receiverUid: uid as string },
+        ],
+        // Filter berdasarkan roomId personal untuk memastikan tidak tercampur
+        roomId: personalRoomId,
+      };
+      if (villageId !== 'ALL') whereClause.villageId = villageId;
+    }
+
+    const messages = await Message.findAll({
+      where: whereClause,
+      order: [['createdAt', 'ASC']],
+      limit: 100, // Batasi jumlah pesan yang diambil
+    });
+
+    res.json({ success: true, data: messages });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const updateMessage = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { messageId } = req.params;
+    const { message, isDeleted, isEdited } = req.body;
+    const firebaseUser = req.firebaseUser;
+
+    const msg = await Message.findByPk(messageId as string);
+
+    if (!msg) {
+      res.status(404).json({ success: false, message: 'Pesan tidak ditemukan' });
+      return;
+    }
+
+    if (msg.getDataValue('senderUid') !== firebaseUser?.uid) {
+      res.status(403).json({ success: false, message: 'Anda tidak bisa mengubah pesan ini' });
+      return;
+    }
+
+    const updateData: any = {};
+    if (message) updateData.message = message;
+    if (isDeleted !== undefined) updateData.isDeleted = isDeleted;
+    if (isEdited !== undefined) updateData.isEdited = isEdited;
+
+    await msg.update(updateData);
+
+    res.json({ success: true, data: msg });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getUnreadCounts = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { uid } = req.query;
+    if (!uid || typeof uid !== 'string') {
+      res.status(400).json({ success: false, message: 'UID diperlukan' });
+      return;
+    }
+
+    const unreadMessages = await Message.findAll({
+      where: {
+        [Op.or]: [{ receiverUid: uid }, { roomId: { [Op.like]: 'GROUP_%' } }],
+        isRead: false,
+        senderUid: { [Op.ne]: uid }, // Jangan hitung pesan dari diri sendiri
+      },
+      order: [['createdAt', 'DESC']],
+    });
+
+    const counts: Record<string, number> = {};
+    const detailsMap: Record<string, any> = {};
+
+    unreadMessages.forEach((msg: any) => {
+      const key = msg.getDataValue('roomId') || msg.getDataValue('senderUid');
+      if (key) {
+        counts[key] = (counts[key] || 0) + 1;
+        if (!detailsMap[key]) {
+          detailsMap[key] = {
+            senderUid: msg.getDataValue('senderUid'),
+            senderName: msg.getDataValue('senderName'),
+            message: msg.getDataValue('message'),
+            roomId: msg.getDataValue('roomId'),
+            createdAt: msg.getDataValue('createdAt'),
+          };
+        }
+      }
+    });
+
+    const detailsArray = Object.values(detailsMap).slice(0, 5);
+
+    res.json({ success: true, data: counts, details: detailsArray });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const markMessagesRead = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { uid, roomId, senderUid } = req.body;
+
+    if (!uid) {
+      res.status(400).json({ success: false, message: 'UID diperlukan' });
+      return;
+    }
+
+    let whereClause: any = {};
+    if (roomId) {
+      whereClause = { roomId, receiverUid: null }; // Grup
+    } else if (senderUid) {
+      whereClause = { senderUid, receiverUid: uid }; // Personal
+    } else {
+      res.status(400).json({ success: false, message: 'roomId atau senderUid diperlukan' });
+      return;
+    }
+
+    await Message.update({ isRead: true }, { where: whereClause });
+
+    res.json({ success: true, message: 'Pesan ditandai terbaca' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

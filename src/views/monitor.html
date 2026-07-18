@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jimpitan API Server - Control Panel</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --panel-bg: rgba(30, 41, 59, 0.7);
+            --text-color: #f8fafc;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.15) 0px, transparent 50%);
+            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1000px;
+            padding: 2rem;
+            box-sizing: border-box;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+            animation: fadeInDown 0.8s ease-out;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin: 0;
+            background: linear-gradient(to right, #60a5fa, #34d399);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        p {
+            color: #94a3b8;
+            margin-top: 0.5rem;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .card {
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            transition: transform 0.2s, box-shadow 0.2s;
+            animation: fadeInUp 0.8s ease-out backwards;
+        }
+        
+        .card:nth-child(2) { animation-delay: 0.1s; }
+        .card:nth-child(3) { animation-delay: 0.2s; }
+        .card:nth-child(4) { animation-delay: 0.3s; }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .card-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #cbd5e1;
+            margin-top: 0;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            margin: 0.5rem 0;
+        }
+
+        .stat-label {
+            font-size: 0.875rem;
+            color: #94a3b8;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 1rem;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 4px;
+            transition: width 0.5s ease-out, background-color 0.3s;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+
+        .status-online { color: var(--success); }
+        .status-online .status-dot { background-color: var(--success); box-shadow: 0 0 8px var(--success); }
+        
+        .status-offline { color: var(--danger); }
+        .status-offline .status-dot { background-color: var(--danger); box-shadow: 0 0 8px var(--danger); }
+
+        .controls-section {
+            margin-top: 2rem;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-color);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+        }
+        .btn-danger:hover { background: rgba(239, 68, 68, 0.2); }
+
+        .btn-warning {
+            background: rgba(245, 158, 11, 0.1);
+            border-color: rgba(245, 158, 11, 0.3);
+            color: #fcd34d;
+        }
+        .btn-warning:hover { background: rgba(245, 158, 11, 0.2); }
+
+        .btn-info {
+            background: rgba(59, 130, 246, 0.1);
+            border-color: rgba(59, 130, 246, 0.3);
+            color: #93c5fd;
+        }
+        .btn-info:hover { background: rgba(59, 130, 246, 0.2); }
+
+        #toast-container {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            z-index: 50;
+        }
+
+        .toast {
+            background: rgba(30, 41, 59, 0.95);
+            backdrop-filter: blur(8px);
+            border-left: 4px solid var(--accent);
+            color: white;
+            padding: 1rem 1.5rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+            animation: slideInRight 0.3s ease-out forwards;
+            max-width: 350px;
+        }
+
+        .toast.success { border-color: var(--success); }
+        .toast.error { border-color: var(--danger); }
+
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes slideInRight {
+            from { opacity: 0; transform: translateX(100%); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes fadeOut {
+            to { opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Jimpitan Server Control</h1>
+            <p>Sistem Pemantauan dan Kendali API Node.js</p>
+        </header>
+
+        <div class="grid">
+            <!-- CPU Usage -->
+            <div class="card">
+                <h3 class="card-title">🖥️ Penggunaan CPU</h3>
+                <div class="stat-value" id="cpu-val">0%</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="cpu-bar" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- Memory Usage -->
+            <div class="card">
+                <h3 class="card-title">🧠 Penggunaan Memori</h3>
+                <div class="stat-value" id="mem-val">0 / 0 MB</div>
+                <canvas id="memChart" width="300" height="60" style="width: 100%; margin-top: 1rem; border-bottom: 1px solid rgba(255,255,255,0.1);"></canvas>
+            </div>
+
+            <!-- Uptime -->
+            <div class="card">
+                <h3 class="card-title">⏱️ Waktu Nyala (Uptime)</h3>
+                <div class="stat-value" id="uptime-val" style="font-size: 1.5rem;">0h 0m 0s</div>
+                <div class="stat-label">Terus beroperasi tanpa henti</div>
+            </div>
+
+            <!-- Services Status -->
+            <div class="card">
+                <h3 class="card-title">🔌 Status Layanan</h3>
+                <div style="display: flex; flex-direction: column; gap: 1rem; margin-top: 1rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>Database (MySQL)</span>
+                        <span class="status-badge status-online" id="db-status">
+                            <span class="status-dot"></span><span id="db-text">Memuat...</span>
+                        </span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>Firebase (FCM)</span>
+                        <span class="status-badge status-online" id="fcm-status">
+                            <span class="status-dot"></span><span id="fcm-text">Memuat...</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls-section card" style="animation-delay: 0.4s;">
+            <h3 class="card-title" style="margin-bottom: 1.5rem;">🛠️ Kendali Server (Actions)</h3>
+            <div class="button-group">
+                <button class="btn btn-warning" onclick="performAction('clear-cache')">
+                    🧹 Bersihkan Cache
+                </button>
+                <button class="btn btn-info" onclick="performAction('test-fcm')">
+                    🔔 Test Koneksi FCM
+                </button>
+                <button class="btn btn-danger" onclick="performAction('restart')">
+                    🔄 Restart Server API
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script>
+        // Graph state
+        const memHistory = new Array(20).fill(0);
+        
+        // Fetch stats periodically
+        async function fetchStats() {
+            try {
+                const res = await fetch('/api/server/stats');
+                const result = await res.json();
+                
+                if (result.success) {
+                    const data = result.data;
+                    
+                    // Update CPU
+                    document.getElementById('cpu-val').innerText = `${data.cpuUsage}%`;
+                    const cpuBar = document.getElementById('cpu-bar');
+                    cpuBar.style.width = `${data.cpuUsage}%`;
+                    cpuBar.style.backgroundColor = data.cpuUsage > 80 ? 'var(--danger)' : (data.cpuUsage > 50 ? 'var(--warning)' : 'var(--accent)');
+
+                    // Update Memory
+                    document.getElementById('mem-val').innerText = `${data.usedMemMb} MB`;
+                    
+                    // Add to history and draw chart
+                    memHistory.push(data.memoryUsagePercent);
+                    if (memHistory.length > 20) memHistory.shift();
+                    drawMemChart();
+
+                    // Update Uptime
+                    document.getElementById('uptime-val').innerText = data.uptime;
+
+                    // Update Statuses
+                    updateStatusBadge('db', data.dbStatus);
+                    updateStatusBadge('fcm', data.fcmStatus);
+                }
+            } catch (error) {
+                console.error("Gagal mengambil statistik:", error);
+                updateStatusBadge('db', 'OFFLINE');
+                updateStatusBadge('fcm', 'OFFLINE');
+            }
+        }
+
+        function drawMemChart() {
+            const canvas = document.getElementById('memChart');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            ctx.clearRect(0, 0, width, height);
+            
+            // Draw line
+            ctx.beginPath();
+            ctx.strokeStyle = '#3b82f6';
+            ctx.lineWidth = 2;
+            
+            const step = width / (memHistory.length - 1);
+            
+            for (let i = 0; i < memHistory.length; i++) {
+                const x = i * step;
+                // Value is percentage 0-100, map to height
+                const y = height - (memHistory[i] / 100 * height);
+                
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.stroke();
+
+            // Fill area under line
+            ctx.lineTo(width, height);
+            ctx.lineTo(0, height);
+            ctx.closePath();
+            
+            const gradient = ctx.createLinearGradient(0, 0, 0, height);
+            gradient.addColorStop(0, 'rgba(59, 130, 246, 0.5)');
+            gradient.addColorStop(1, 'rgba(59, 130, 246, 0.0)');
+            ctx.fillStyle = gradient;
+            ctx.fill();
+        }
+
+        function updateStatusBadge(idPrefix, status) {
+            const badge = document.getElementById(`${idPrefix}-status`);
+            const text = document.getElementById(`${idPrefix}-text`);
+            
+            text.innerText = status;
+            
+            if (status === 'ONLINE') {
+                badge.className = 'status-badge status-online';
+            } else {
+                badge.className = 'status-badge status-offline';
+            }
+        }
+
+        async function performAction(action) {
+            if (action === 'restart' && !confirm('Apakah Anda yakin ingin melakukan Restart pada server API? Ini akan memutus koneksi sementara.')) {
+                return;
+            }
+
+            let payload = {};
+            if (action === 'test-fcm') {
+                const villageId = prompt("Masukkan ID Desa (Village ID) untuk percobaan FCM:", "TEST_VILLAGE");
+                if (!villageId) return;
+                payload = { villageId };
+            }
+
+            try {
+                const res = await fetch('/api/server/action', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action, payload })
+                });
+                
+                const result = await res.json();
+                
+                if (result.success) {
+                    showToast(result.message, 'success');
+                } else {
+                    showToast(result.message || 'Gagal mengeksekusi perintah', 'error');
+                }
+            } catch (error) {
+                showToast('Terjadi kesalahan jaringan saat mengeksekusi perintah.', 'error');
+            }
+        }
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerText = message;
+            
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.animation = 'fadeOut 0.3s ease-out forwards';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Initialize
+        fetchStats();
+        setInterval(fetchStats, 3000); // Refresh every 3 seconds
+    </script>
+</body>
+</html>
