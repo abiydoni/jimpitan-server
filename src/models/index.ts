@@ -234,6 +234,8 @@ DuesJournal.init({
   tariffId: { type: DataTypes.STRING(128), allowNull: true },
   recordedBy: { type: DataTypes.STRING(128), allowNull: true },
   date: { type: DataTypes.DATEONLY, allowNull: true },
+  period: { type: DataTypes.STRING(50), allowNull: true },
+  timestamp: { type: DataTypes.STRING(128), allowNull: true },
 }, { sequelize, modelName: 'duesJournal', tableName: 'dues_journals', timestamps: true, updatedAt: false });
 
 // ---------------------------
