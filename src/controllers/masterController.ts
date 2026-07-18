@@ -233,6 +233,12 @@ export const saveUserFamily = async (req: Request, res: Response): Promise<void>
         }, { transaction });
       }
 
+      if (userData.createdAt) {
+        (user as any).setDataValue('createdAt', new Date(userData.createdAt as string));
+        (user as any).changed('createdAt', true);
+        await user.save({ transaction });
+      }
+
       // Process roles
       if (roles && Array.isArray(roles)) {
         const uniqueRoles = roles.filter((val: any, idx: number, arr: any[]) => arr.indexOf(val) === idx) as string[];
@@ -505,6 +511,12 @@ export const bulkImportUsers = async (req: Request, res: Response): Promise<void
             email: finalEmail,
             ...userData
           }, { transaction });
+        }
+
+        if (userData.createdAt) {
+          (user as any).setDataValue('createdAt', new Date(userData.createdAt as string));
+          (user as any).changed('createdAt', true);
+          await user.save({ transaction });
         }
 
         // Process roles

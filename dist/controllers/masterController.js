@@ -227,6 +227,11 @@ const saveUserFamily = async (req, res) => {
                     ...userData
                 }, { transaction });
             }
+            if (userData.createdAt) {
+                user.setDataValue('createdAt', new Date(userData.createdAt));
+                user.changed('createdAt', true);
+                await user.save({ transaction });
+            }
             // Process roles
             if (roles && Array.isArray(roles)) {
                 const uniqueRoles = roles.filter((val, idx, arr) => arr.indexOf(val) === idx);
@@ -496,6 +501,11 @@ const bulkImportUsers = async (req, res) => {
                         email: finalEmail,
                         ...userData
                     }, { transaction });
+                }
+                if (userData.createdAt) {
+                    user.setDataValue('createdAt', new Date(userData.createdAt));
+                    user.changed('createdAt', true);
+                    await user.save({ transaction });
                 }
                 // Process roles
                 if (roles && Array.isArray(roles)) {
