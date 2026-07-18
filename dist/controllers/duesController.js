@@ -23,7 +23,7 @@ const getDuesJournals = async (req, res) => {
 exports.getDuesJournals = getDuesJournals;
 const createDuesJournal = async (req, res) => {
     try {
-        const { id, villageId, kkId, amount, journalType, type, description, tariffId, recordedBy, date } = req.body;
+        const { id, villageId, kkId, amount, journalType, type, description, tariffId, recordedBy, date, period, timestamp } = req.body;
         const journal = await models_1.DuesJournal.create({
             id: id || `journal_${Date.now()}`,
             villageId,
@@ -34,7 +34,9 @@ const createDuesJournal = async (req, res) => {
             description,
             tariffId: tariffId || null,
             recordedBy,
-            date: date || new Date()
+            date: date || new Date(),
+            period: period || null,
+            timestamp: timestamp || null
         });
         // Trigger FCM Sync
         await (0, firebaseService_1.sendSyncNotification)(villageId, 'REFRESH_DUES');
@@ -85,6 +87,11 @@ exports.getTariffs = getTariffs;
 const createTariff = async (req, res) => {
     try {
         const tariff = await models_1.Tariff.create(req.body);
+        if (req.body.createdAt) {
+            tariff.setDataValue('createdAt', new Date(req.body.createdAt));
+            tariff.changed('createdAt', true);
+            await tariff.save();
+        }
         await (0, firebaseService_1.sendSyncNotification)(req.body.villageId, 'REFRESH_TARIFFS');
         res.status(201).json({ success: true, data: tariff });
     }
@@ -100,6 +107,10 @@ const updateTariff = async (req, res) => {
         if (!tariff) {
             res.status(404).json({ success: false, message: 'Tariff not found' });
             return;
+        }
+        if (req.body.createdAt) {
+            tariff.setDataValue('createdAt', new Date(req.body.createdAt));
+            tariff.changed('createdAt', true);
         }
         await tariff.update(req.body);
         await (0, firebaseService_1.sendSyncNotification)(tariff.villageId, 'REFRESH_TARIFFS');

@@ -262,6 +262,8 @@ DuesJournal.init({
     tariffId: { type: sequelize_1.DataTypes.STRING(128), allowNull: true },
     recordedBy: { type: sequelize_1.DataTypes.STRING(128), allowNull: true },
     date: { type: sequelize_1.DataTypes.DATEONLY, allowNull: true },
+    period: { type: sequelize_1.DataTypes.STRING(50), allowNull: true },
+    timestamp: { type: sequelize_1.DataTypes.STRING(128), allowNull: true },
 }, { sequelize: database_1.sequelize, modelName: 'duesJournal', tableName: 'dues_journals', timestamps: true, updatedAt: false });
 // ---------------------------
 // 10. Model Jimpitan History
