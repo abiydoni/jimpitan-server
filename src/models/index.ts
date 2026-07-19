@@ -246,8 +246,15 @@ JimpitanHistory.init({
   id: { type: DataTypes.STRING(128), primaryKey: true },
   villageId: { type: DataTypes.STRING(128), allowNull: false },
   schedulesNik: { type: DataTypes.STRING(50), allowNull: true },
-  amountCollected: { type: DataTypes.INTEGER, allowNull: false },
+  amountCollected: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 0 },
   date: { type: DataTypes.DATEONLY, allowNull: true },
+  kkId: { type: DataTypes.STRING(128), allowNull: true },
+  name: { type: DataTypes.STRING(255), allowNull: true },
+  amount: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 0 },
+  scannedBy: { type: DataTypes.STRING(128), allowNull: true },
+  scannedByName: { type: DataTypes.STRING(128), allowNull: true },
+  timestamp: { type: DataTypes.STRING(128), allowNull: true },
+  type: { type: DataTypes.STRING(50), allowNull: true },
 }, { sequelize, modelName: 'jimpitanHistory', tableName: 'jimpitan_history', timestamps: true, updatedAt: false });
 
 

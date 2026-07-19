@@ -228,7 +228,11 @@ export const getJimpitanHistory = async (req: Request, res: Response): Promise<v
 
 export const createJimpitanHistory = async (req: Request, res: Response): Promise<void> => {
   try {
-    const history = await JimpitanHistory.create(req.body);
+    const payload = {
+      id: req.body.id || `jimpitan_${Date.now()}`,
+      ...req.body
+    };
+    const history = await JimpitanHistory.create(payload);
     await sendSyncNotification(req.body.villageId, 'REFRESH_JIMPITAN');
     res.status(201).json({ success: true, data: history });
   } catch (error: any) {
