@@ -23,7 +23,7 @@ const getDuesJournals = async (req, res) => {
 exports.getDuesJournals = getDuesJournals;
 const createDuesJournal = async (req, res) => {
     try {
-        const { id, villageId, kkId, amount, journalType, type, description, tariffId, recordedBy, date, period, timestamp } = req.body;
+        const { id, villageId, kkId, amount, journalType, type, description, tariffId, recordedBy, date, period, timestamp, paidDates } = req.body;
         const journal = await models_1.DuesJournal.create({
             id: id || `journal_${Date.now()}`,
             villageId,
@@ -36,7 +36,8 @@ const createDuesJournal = async (req, res) => {
             recordedBy,
             date: date || new Date(),
             period: period || null,
-            timestamp: timestamp || null
+            timestamp: timestamp || null,
+            paidDates: paidDates || null
         });
         // Trigger FCM Sync
         await (0, firebaseService_1.sendSyncNotification)(villageId, 'REFRESH_DUES');

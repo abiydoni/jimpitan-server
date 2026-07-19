@@ -23,7 +23,7 @@ export const getDuesJournals = async (req: Request, res: Response): Promise<void
 
 export const createDuesJournal = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id, villageId, kkId, amount, journalType, type, description, tariffId, recordedBy, date, period, timestamp } = req.body;
+    const { id, villageId, kkId, amount, journalType, type, description, tariffId, recordedBy, date, period, timestamp, paidDates } = req.body;
 
     const journal = await DuesJournal.create({
       id: id || `journal_${Date.now()}`,
@@ -37,7 +37,8 @@ export const createDuesJournal = async (req: Request, res: Response): Promise<vo
       recordedBy,
       date: date || new Date(),
       period: period || null,
-      timestamp: timestamp || null
+      timestamp: timestamp || null,
+      paidDates: paidDates || null
     });
 
     // Trigger FCM Sync
