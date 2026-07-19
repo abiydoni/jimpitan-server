@@ -228,7 +228,11 @@ const getJimpitanHistory = async (req, res) => {
 exports.getJimpitanHistory = getJimpitanHistory;
 const createJimpitanHistory = async (req, res) => {
     try {
-        const history = await models_1.JimpitanHistory.create(req.body);
+        const payload = {
+            id: req.body.id || `jimpitan_${Date.now()}`,
+            ...req.body
+        };
+        const history = await models_1.JimpitanHistory.create(payload);
         await (0, firebaseService_1.sendSyncNotification)(req.body.villageId, 'REFRESH_JIMPITAN');
         res.status(201).json({ success: true, data: history });
     }

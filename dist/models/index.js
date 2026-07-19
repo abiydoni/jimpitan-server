@@ -264,6 +264,7 @@ DuesJournal.init({
     date: { type: sequelize_1.DataTypes.DATEONLY, allowNull: true },
     period: { type: sequelize_1.DataTypes.STRING(50), allowNull: true },
     timestamp: { type: sequelize_1.DataTypes.STRING(128), allowNull: true },
+    paidDates: { type: sequelize_1.DataTypes.JSON, allowNull: true },
 }, { sequelize: database_1.sequelize, modelName: 'duesJournal', tableName: 'dues_journals', timestamps: true, updatedAt: false });
 // ---------------------------
 // 10. Model Jimpitan History
@@ -275,8 +276,15 @@ JimpitanHistory.init({
     id: { type: sequelize_1.DataTypes.STRING(128), primaryKey: true },
     villageId: { type: sequelize_1.DataTypes.STRING(128), allowNull: false },
     schedulesNik: { type: sequelize_1.DataTypes.STRING(50), allowNull: true },
-    amountCollected: { type: sequelize_1.DataTypes.INTEGER, allowNull: false },
+    amountCollected: { type: sequelize_1.DataTypes.INTEGER, allowNull: true, defaultValue: 0 },
     date: { type: sequelize_1.DataTypes.DATEONLY, allowNull: true },
+    kkId: { type: sequelize_1.DataTypes.STRING(128), allowNull: true },
+    name: { type: sequelize_1.DataTypes.STRING(255), allowNull: true },
+    amount: { type: sequelize_1.DataTypes.INTEGER, allowNull: true, defaultValue: 0 },
+    scannedBy: { type: sequelize_1.DataTypes.STRING(128), allowNull: true },
+    scannedByName: { type: sequelize_1.DataTypes.STRING(128), allowNull: true },
+    timestamp: { type: sequelize_1.DataTypes.STRING(128), allowNull: true },
+    type: { type: sequelize_1.DataTypes.STRING(50), allowNull: true },
 }, { sequelize: database_1.sequelize, modelName: 'jimpitanHistory', tableName: 'jimpitan_history', timestamps: true, updatedAt: false });
 // ==========================================
 // PENGATURAN RELASI (FOREIGN KEYS)
