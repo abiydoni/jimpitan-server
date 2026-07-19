@@ -1,3 +1,4 @@
+process.env.TZ = 'Asia/Jakarta'; // Paksa zona waktu server ke WIB (UTC+7)
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';

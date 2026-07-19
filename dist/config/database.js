@@ -15,6 +15,7 @@ if (!dbUrl) {
 exports.sequelize = new sequelize_1.Sequelize(dbUrl, {
     dialect: 'mysql',
     logging: false, // Ubah ke console.log untuk melihat log query SQL di terminal
+    timezone: '+07:00', // Zona waktu Indonesia (WIB = UTC+7)
 });
 const connectDB = async () => {
     let isConnected = false;
