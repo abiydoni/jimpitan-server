@@ -80,6 +80,27 @@ export const registerVillage = async (req: Request, res: Response): Promise<void
       villageCode += chars.charAt(Math.floor(Math.random() * chars.length));
     }
 
+    // Ambil semua menu untuk membuat permission awal
+    // Kecualikan menu-menu sakral yang HANYA boleh diakses SUPER_ADMIN
+    const forbiddenForAdminDesa = ['villages', 'menu_master'];
+    const wargaMenus = ['scan', 'history', 'chat', 'home', 'profile', 'inventory', 'settings', 'help'];
+    const menus = await Menu.findAll();
+    const menuPermissions: any = {};
+    menus.forEach((m: any) => {
+      // SUPER_ADMIN selalu punya full access di semua menu
+      menuPermissions[m.id] = {
+        'SUPER_ADMIN': { view: true, create: true, edit: true, delete: true }
+      };
+      
+      if (!forbiddenForAdminDesa.includes(m.id)) {
+        menuPermissions[m.id]['ADMIN_DESA'] = { view: true, create: true, edit: true, delete: true };
+      }
+      
+      if (wargaMenus.includes(m.id)) {
+        menuPermissions[m.id]['WARGA'] = { view: true, create: false, edit: false, delete: false };
+      }
+    });
+
     const villageId = `village_${uuidv4().substring(0, 8)}`;
 
     // 2. Create new village document
@@ -91,7 +112,8 @@ export const registerVillage = async (req: Request, res: Response): Promise<void
       config: {
         roles: ['SUPER_ADMIN', 'ADMIN_DESA', 'WARGA'],
         currency: 'IDR',
-        timezone: 'Asia/Jakarta'
+        timezone: 'Asia/Jakarta',
+        menuPermissions
       }
     }, { transaction });
 
@@ -124,6 +146,22 @@ export const registerVillage = async (req: Request, res: Response): Promise<void
       villageId
     }, { transaction });
 
+    // Create Master Role ADMIN_DESA (so it exists globally for this village)
+    await Role.create({
+      id: `role_master_${villageId}_ADMIN_DESA_${Date.now()}`,
+      name: 'ADMIN_DESA',
+      userId: null,
+      villageId
+    }, { transaction });
+
+    // Create Master Role WARGA
+    await Role.create({
+      id: `role_master_${villageId}_WARGA_${Date.now()}`,
+      name: 'WARGA',
+      userId: null,
+      villageId
+    }, { transaction });
+
     // 4. Setup default Jimpitan tariff
     await Tariff.create({
       id: `${villageId}_jimpitan`,
@@ -136,7 +174,7 @@ export const registerVillage = async (req: Request, res: Response): Promise<void
 
     // 5. Setup default BILL slide
     await Slide.create({
-      id: `slide_${uuidv4().substring(0, 8)}`,
+      id: `${villageId}_bill`,
       title: 'Tagihan',
       subtitle: 'Bulan Ini',
       type: 'BILL',
@@ -364,7 +402,12 @@ export const deleteMenu = async (req: Request, res: Response): Promise<void> => 
 // Slides
 export const getSlides = async (req: Request, res: Response): Promise<void> => {
   try {
-    const slides = await Slide.findAll();
+    const { villageId } = req.query;
+    const whereClause: any = {};
+    if (villageId) {
+      whereClause.villageId = villageId;
+    }
+    const slides = await Slide.findAll({ where: whereClause });
     res.json({ success: true, data: slides });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
