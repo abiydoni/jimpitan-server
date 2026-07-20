@@ -229,14 +229,16 @@ export const getJimpitanHistory = async (req: Request, res: Response): Promise<v
 
 export const createJimpitanHistory = async (req: Request, res: Response): Promise<void> => {
   try {
+    console.log('createJimpitanHistory called with:', req.body);
     const payload = {
-      id: req.body.id || `jimpitan_${Date.now()}`,
+      id: req.body.id || `jimpitan_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
       ...req.body
     };
     const history = await JimpitanHistory.create(payload);
     await sendSyncNotification(req.body.villageId, 'REFRESH_JIMPITAN');
     res.status(201).json({ success: true, data: history });
   } catch (error: any) {
+    console.error('Error creating jimpitan history:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };

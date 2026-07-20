@@ -229,8 +229,9 @@ const getJimpitanHistory = async (req, res) => {
 exports.getJimpitanHistory = getJimpitanHistory;
 const createJimpitanHistory = async (req, res) => {
     try {
+        console.log('createJimpitanHistory called with:', req.body);
         const payload = {
-            id: req.body.id || `jimpitan_${Date.now()}`,
+            id: req.body.id || `jimpitan_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
             ...req.body
         };
         const history = await models_1.JimpitanHistory.create(payload);
@@ -238,6 +239,7 @@ const createJimpitanHistory = async (req, res) => {
         res.status(201).json({ success: true, data: history });
     }
     catch (error) {
+        console.error('Error creating jimpitan history:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 };
