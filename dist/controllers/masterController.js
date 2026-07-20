@@ -193,12 +193,17 @@ const getUsers = async (req, res) => {
             whereClause.villageId = villageId;
         if (status)
             whereClause.status = status;
+        const roleWhereClause = {};
+        if (villageId)
+            roleWhereClause.villageId = villageId;
         const users = await models_1.User.findAll({
             where: whereClause,
             include: [{
                     model: models_1.Role,
                     as: 'roles',
-                    attributes: ['id', 'name', 'villageId']
+                    attributes: ['id', 'name', 'villageId'],
+                    where: roleWhereClause,
+                    required: false
                 }]
         });
         const formattedUsers = users.map((u) => {

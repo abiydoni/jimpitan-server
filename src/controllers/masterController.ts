@@ -199,13 +199,18 @@ export const getUsers = async (req: Request, res: Response): Promise<void> => {
     const whereClause: any = {};
     if (villageId) whereClause.villageId = villageId;
     if (status) whereClause.status = status;
+
+    const roleWhereClause: any = {};
+    if (villageId) roleWhereClause.villageId = villageId;
     
     const users = await User.findAll({ 
       where: whereClause,
       include: [{
         model: Role,
         as: 'roles',
-        attributes: ['id', 'name', 'villageId']
+        attributes: ['id', 'name', 'villageId'],
+        where: roleWhereClause,
+        required: false
       }]
     });
 
