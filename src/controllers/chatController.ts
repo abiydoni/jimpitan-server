@@ -158,7 +158,7 @@ export const getChatContacts = async (req: AuthRequest, res: Response): Promise<
       allVillages.forEach((v: any) => {
         groups.push({
           uid: `GROUP_${v.id}`,
-          name: `Grup Warga RT - ${v.name}`,
+          name: `Grup Warga - ${v.name}`,
           isGroup: true,
           isOnline: false,
         });
@@ -170,7 +170,7 @@ export const getChatContacts = async (req: AuthRequest, res: Response): Promise<
       if (village) {
         groups.push({
           uid: `GROUP_${village.id}`,
-          name: `Grup Warga RT - ${village.name}`,
+          name: `Grup Warga - ${village.name}`,
           isGroup: true,
           isOnline: false,
         });

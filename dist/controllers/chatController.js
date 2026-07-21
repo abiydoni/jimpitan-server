@@ -133,7 +133,7 @@ const getChatContacts = async (req, res) => {
             allVillages.forEach((v) => {
                 groups.push({
                     uid: `GROUP_${v.id}`,
-                    name: `Grup Warga RT - ${v.name}`,
+                    name: `Grup Warga - ${v.name}`,
                     isGroup: true,
                     isOnline: false,
                 });
@@ -146,7 +146,7 @@ const getChatContacts = async (req, res) => {
             if (village) {
                 groups.push({
                     uid: `GROUP_${village.id}`,
-                    name: `Grup Warga RT - ${village.name}`,
+                    name: `Grup Warga - ${village.name}`,
                     isGroup: true,
                     isOnline: false,
                 });
