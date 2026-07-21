@@ -29,20 +29,20 @@ export const sendMessage = async (req: AuthRequest, res: Response): Promise<void
   }
 
   try {
-    let actualVillageId = villageId;
+    let actualVillageId: string | null = (villageId as string) === 'ALL' ? null : (villageId as string);
     
-    // Jika Super Admin mengirim pesan global, kita ambil villageId dari receiver
-    if (villageId === 'ALL' && receiverUid) {
+    // Jika Super Admin mengirim pesan personal, ambil villageId dari receiver agar pesan tercatat di desa yang benar
+    if (!actualVillageId && receiverUid) {
       const receiver = await User.findOne({ where: { uid: receiverUid } });
       if (receiver) {
-        actualVillageId = receiver.getDataValue('villageId') || 'GLOBAL';
+        actualVillageId = receiver.getDataValue('villageId') || null;
       }
     }
 
     // 1. Simpan pesan ke database
     await Message.create({
       id: `msg_${uuidv4()}`,
-      villageId: actualVillageId,
+      villageId: actualVillageId, // null jika lintas desa (Super Admin global)
       senderUid,
       receiverUid,
       roomId,
@@ -190,14 +190,13 @@ export const getMessages = async (req: AuthRequest, res: Response): Promise<void
       if (villageId !== 'ALL') whereClause.villageId = villageId;
     } else {
       // Logika untuk mengambil pesan personal
-      const personalRoomId = `PERSONAL_${[uid as string, targetUid].sort().join('_')}`;
+      // Cari berdasarkan pasangan senderUid <-> receiverUid saja (tanpa filter roomId)
+      // agar kompatibel dengan pesan lama yang mungkin roomId-nya berbeda format
       whereClause = {
         [Op.or]: [
           { senderUid: uid as string, receiverUid: targetUid },
           { senderUid: targetUid, receiverUid: uid as string },
         ],
-        // Filter berdasarkan roomId personal untuk memastikan tidak tercampur
-        roomId: personalRoomId,
       };
       if (villageId !== 'ALL') whereClause.villageId = villageId;
     }
@@ -253,9 +252,24 @@ export const getUnreadCounts = async (req: AuthRequest, res: Response): Promise<
       return;
     }
 
+    // Cari desa user ini untuk membatasi grup yang terlihat
+    const currentUser = await User.findOne({ where: { uid }, attributes: ['villageId'] });
+    const userVillageId = currentUser?.getDataValue('villageId');
+
+    // Buat kondisi untuk pesan grup:
+    // - Super Admin: lihat semua grup (tidak filter villageId karena pesannya bisa null)
+    // - User biasa: hanya grup dari desanya sendiri
+    const groupCondition: any = { roomId: { [Op.like]: 'GROUP_%' } };
+    if (uid !== 'SUPER_ADMIN') {
+      groupCondition.villageId = userVillageId || '__NONE__';
+    }
+
     const unreadMessages = await Message.findAll({
       where: {
-        [Op.or]: [{ receiverUid: uid }, { roomId: { [Op.like]: 'GROUP_%' } }],
+        [Op.or]: [
+          { receiverUid: uid }, // Pesan personal
+          groupCondition,       // Pesan grup sesuai akses
+        ],
         isRead: false,
         senderUid: { [Op.ne]: uid }, // Jangan hitung pesan dari diri sendiri
       },
@@ -300,9 +314,11 @@ export const markMessagesRead = async (req: AuthRequest, res: Response): Promise
 
     let whereClause: any = {};
     if (roomId) {
-      whereClause = { roomId, receiverUid: null }; // Grup
+      // Grup: tandai semua pesan di room ini yang bukan dari diri sendiri
+      whereClause = { roomId, senderUid: { [Op.ne]: uid } };
     } else if (senderUid) {
-      whereClause = { senderUid, receiverUid: uid }; // Personal
+      // Personal: tandai pesan dari senderUid yang ditujukan ke uid
+      whereClause = { senderUid, receiverUid: uid };
     } else {
       res.status(400).json({ success: false, message: 'roomId atau senderUid diperlukan' });
       return;

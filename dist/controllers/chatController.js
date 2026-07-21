@@ -25,18 +25,18 @@ const sendMessage = async (req, res) => {
         return;
     }
     try {
-        let actualVillageId = villageId;
-        // Jika Super Admin mengirim pesan global, kita ambil villageId dari receiver
-        if (villageId === 'ALL' && receiverUid) {
+        let actualVillageId = villageId === 'ALL' ? null : villageId;
+        // Jika Super Admin mengirim pesan personal, ambil villageId dari receiver agar pesan tercatat di desa yang benar
+        if (!actualVillageId && receiverUid) {
             const receiver = await models_1.User.findOne({ where: { uid: receiverUid } });
             if (receiver) {
-                actualVillageId = receiver.getDataValue('villageId') || 'GLOBAL';
+                actualVillageId = receiver.getDataValue('villageId') || null;
             }
         }
         // 1. Simpan pesan ke database
         await models_1.ChatMessage.create({
             id: `msg_${(0, uuid_1.v4)()}`,
-            villageId: actualVillageId,
+            villageId: actualVillageId, // null jika lintas desa (Super Admin global)
             senderUid,
             receiverUid,
             roomId,
@@ -167,14 +167,13 @@ const getMessages = async (req, res) => {
         }
         else {
             // Logika untuk mengambil pesan personal
-            const personalRoomId = `PERSONAL_${[uid, targetUid].sort().join('_')}`;
+            // Cari berdasarkan pasangan senderUid <-> receiverUid saja (tanpa filter roomId)
+            // agar kompatibel dengan pesan lama yang mungkin roomId-nya berbeda format
             whereClause = {
                 [sequelize_1.Op.or]: [
                     { senderUid: uid, receiverUid: targetUid },
                     { senderUid: targetUid, receiverUid: uid },
                 ],
-                // Filter berdasarkan roomId personal untuk memastikan tidak tercampur
-                roomId: personalRoomId,
             };
             if (villageId !== 'ALL')
                 whereClause.villageId = villageId;
@@ -227,9 +226,22 @@ const getUnreadCounts = async (req, res) => {
             res.status(400).json({ success: false, message: 'UID diperlukan' });
             return;
         }
+        // Cari desa user ini untuk membatasi grup yang terlihat
+        const currentUser = await models_1.User.findOne({ where: { uid }, attributes: ['villageId'] });
+        const userVillageId = currentUser?.getDataValue('villageId');
+        // Buat kondisi untuk pesan grup:
+        // - Super Admin: lihat semua grup (tidak filter villageId karena pesannya bisa null)
+        // - User biasa: hanya grup dari desanya sendiri
+        const groupCondition = { roomId: { [sequelize_1.Op.like]: 'GROUP_%' } };
+        if (uid !== 'SUPER_ADMIN') {
+            groupCondition.villageId = userVillageId || '__NONE__';
+        }
         const unreadMessages = await models_1.ChatMessage.findAll({
             where: {
-                [sequelize_1.Op.or]: [{ receiverUid: uid }, { roomId: { [sequelize_1.Op.like]: 'GROUP_%' } }],
+                [sequelize_1.Op.or]: [
+                    { receiverUid: uid }, // Pesan personal
+                    groupCondition, // Pesan grup sesuai akses
+                ],
                 isRead: false,
                 senderUid: { [sequelize_1.Op.ne]: uid }, // Jangan hitung pesan dari diri sendiri
             },
@@ -269,10 +281,12 @@ const markMessagesRead = async (req, res) => {
         }
         let whereClause = {};
         if (roomId) {
-            whereClause = { roomId, receiverUid: null }; // Grup
+            // Grup: tandai semua pesan di room ini yang bukan dari diri sendiri
+            whereClause = { roomId, senderUid: { [sequelize_1.Op.ne]: uid } };
         }
         else if (senderUid) {
-            whereClause = { senderUid, receiverUid: uid }; // Personal
+            // Personal: tandai pesan dari senderUid yang ditujukan ke uid
+            whereClause = { senderUid, receiverUid: uid };
         }
         else {
             res.status(400).json({ success: false, message: 'roomId atau senderUid diperlukan' });

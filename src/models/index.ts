@@ -137,7 +137,7 @@ ChatMessage.init({
   isRead: { type: DataTypes.BOOLEAN, defaultValue: false },
   isDeleted: { type: DataTypes.BOOLEAN, defaultValue: false },
   isEdited: { type: DataTypes.BOOLEAN, defaultValue: false },
-  villageId: { type: DataTypes.STRING(128), allowNull: false },
+  villageId: { type: DataTypes.STRING(128), allowNull: true }, // Nullable agar Super Admin bisa kirim pesan lintas desa
 }, { sequelize, modelName: 'chatMessage', tableName: 'chat_messages', timestamps: true });
 
 // ---------------------------
@@ -304,8 +304,8 @@ User.hasMany(ChatMessage, { as: 'ReceivedMessages', foreignKey: 'receiverUid' })
 ChatMessage.belongsTo(User, { as: 'Sender', foreignKey: 'senderUid' });
 ChatMessage.belongsTo(User, { as: 'Receiver', foreignKey: 'receiverUid' });
 
-Village.hasMany(ChatMessage, { foreignKey: 'villageId' });
-ChatMessage.belongsTo(Village, { foreignKey: 'villageId' });
+Village.hasMany(ChatMessage, { foreignKey: 'villageId', constraints: false });
+ChatMessage.belongsTo(Village, { foreignKey: 'villageId', constraints: false }); // constraints: false agar tidak ada FK ke villages (Super Admin bisa kirim lintas desa)
 
 // Slide milik Village
 Village.hasMany(Slide, { foreignKey: 'villageId' });

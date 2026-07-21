@@ -158,7 +158,7 @@ ChatMessage.init({
     isRead: { type: sequelize_1.DataTypes.BOOLEAN, defaultValue: false },
     isDeleted: { type: sequelize_1.DataTypes.BOOLEAN, defaultValue: false },
     isEdited: { type: sequelize_1.DataTypes.BOOLEAN, defaultValue: false },
-    villageId: { type: sequelize_1.DataTypes.STRING(128), allowNull: false },
+    villageId: { type: sequelize_1.DataTypes.STRING(128), allowNull: true }, // Nullable agar Super Admin bisa kirim pesan lintas desa
 }, { sequelize: database_1.sequelize, modelName: 'chatMessage', tableName: 'chat_messages', timestamps: true });
 // ---------------------------
 // 5. Model Slide (Banner)
@@ -321,8 +321,8 @@ User.hasMany(ChatMessage, { as: 'SentMessages', foreignKey: 'senderUid' });
 User.hasMany(ChatMessage, { as: 'ReceivedMessages', foreignKey: 'receiverUid' });
 ChatMessage.belongsTo(User, { as: 'Sender', foreignKey: 'senderUid' });
 ChatMessage.belongsTo(User, { as: 'Receiver', foreignKey: 'receiverUid' });
-Village.hasMany(ChatMessage, { foreignKey: 'villageId' });
-ChatMessage.belongsTo(Village, { foreignKey: 'villageId' });
+Village.hasMany(ChatMessage, { foreignKey: 'villageId', constraints: false });
+ChatMessage.belongsTo(Village, { foreignKey: 'villageId', constraints: false }); // constraints: false agar tidak ada FK ke villages (Super Admin bisa kirim lintas desa)
 // Slide milik Village
 Village.hasMany(Slide, { foreignKey: 'villageId' });
 Slide.belongsTo(Village, { foreignKey: 'villageId' });
