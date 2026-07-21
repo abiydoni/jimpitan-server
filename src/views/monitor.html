@@ -297,20 +297,6 @@
             </div>
         </div>
 
-        <div class="controls-section card" style="animation-delay: 0.4s;">
-            <h3 class="card-title" style="margin-bottom: 1.5rem;">🛠️ Kendali Server (Actions)</h3>
-            <div class="button-group">
-                <button class="btn btn-warning" onclick="performAction('clear-cache')">
-                    🧹 Bersihkan Cache
-                </button>
-                <button class="btn btn-info" onclick="performAction('test-fcm')">
-                    🔔 Test Koneksi FCM
-                </button>
-                <button class="btn btn-danger" onclick="performAction('restart')">
-                    🔄 Restart Server API
-                </button>
-            </div>
-        </div>
     </div>
 
     <div id="toast-container"></div>
@@ -406,37 +392,6 @@
                 badge.className = 'status-badge status-online';
             } else {
                 badge.className = 'status-badge status-offline';
-            }
-        }
-
-        async function performAction(action) {
-            if (action === 'restart' && !confirm('Apakah Anda yakin ingin melakukan Restart pada server API? Ini akan memutus koneksi sementara.')) {
-                return;
-            }
-
-            let payload = {};
-            if (action === 'test-fcm') {
-                const villageId = prompt("Masukkan ID Desa (Village ID) untuk percobaan FCM:", "TEST_VILLAGE");
-                if (!villageId) return;
-                payload = { villageId };
-            }
-
-            try {
-                const res = await fetch('/api/server/action', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action, payload })
-                });
-                
-                const result = await res.json();
-                
-                if (result.success) {
-                    showToast(result.message, 'success');
-                } else {
-                    showToast(result.message || 'Gagal mengeksekusi perintah', 'error');
-                }
-            } catch (error) {
-                showToast('Terjadi kesalahan jaringan saat mengeksekusi perintah.', 'error');
             }
         }
 
