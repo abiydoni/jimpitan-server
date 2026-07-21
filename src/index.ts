@@ -18,6 +18,7 @@ import monitorRoutes from './routes/monitorRoutes';
 import path from 'path';
 import { initSaasCronJobs } from './cron/saasJobs';
 import { addStartupLog } from './utils/startupLogs';
+import { User, Role } from './models';
 
 // Inisialisasi model-model agar di-load oleh Sequelize
 import './models';
@@ -81,7 +82,67 @@ app.listen(port, async () => {
   
   // Connect ke database MySQL saat server dinyalakan
   await connectDB();
+
+  // Pastikan data SUPER_ADMIN selalu sinkron antara tabel users dan roles
+  await ensureSuperAdmin();
   
   // Jalankan Cron Jobs untuk SaaS
   initSaasCronJobs();
 });
+
+/**
+ * Memastikan data SUPER_ADMIN ada dan sinkron di tabel users dan roles.
+ * Dipanggil setiap kali server start untuk menjaga konsistensi data.
+ */
+async function ensureSuperAdmin() {
+  try {
+    // 1. Pastikan user SUPER_ADMIN ada di tabel users
+    const [superadmin, userCreated] = await User.findOrCreate({
+      where: { uid: 'SUPER_ADMIN' },
+      defaults: {
+        uid: 'SUPER_ADMIN',
+        name: 'Appsbee Support',
+        email: 'superadmin@appsbee.id',
+        status: 'ACTIVE',
+        isOnline: false,
+      }
+    });
+
+    if (userCreated) {
+      addStartupLog('✅ SUPER_ADMIN user dibuat di tabel users');
+    } else {
+      // Pastikan status ACTIVE dan nama benar (update jika berbeda)
+      const needsUpdate = 
+        superadmin.getDataValue('status') !== 'ACTIVE' ||
+        superadmin.getDataValue('name') !== 'Appsbee Support';
+      
+      if (needsUpdate) {
+        await superadmin.update({ status: 'ACTIVE', name: 'Appsbee Support' });
+        addStartupLog('🔄 SUPER_ADMIN user diperbarui di tabel users');
+      } else {
+        addStartupLog('✅ SUPER_ADMIN user sudah ada dan sinkron');
+      }
+    }
+
+    // 2. Pastikan role SUPER_ADMIN ada di tabel roles
+    const [, roleCreated] = await Role.findOrCreate({
+      where: { id: 'role_super_admin' },
+      defaults: {
+        id: 'role_super_admin',
+        name: 'SUPER_ADMIN',
+        userId: 'SUPER_ADMIN',
+        villageId: null,
+      }
+    });
+
+    if (roleCreated) {
+      addStartupLog('✅ SUPER_ADMIN role dibuat di tabel roles');
+    } else {
+      addStartupLog('✅ SUPER_ADMIN role sudah ada');
+    }
+
+  } catch (error: any) {
+    addStartupLog(`⚠️ Gagal memastikan SUPER_ADMIN sinkron: ${error.message}`);
+    console.error('ensureSuperAdmin error:', error);
+  }
+}

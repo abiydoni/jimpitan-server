@@ -23,6 +23,7 @@ const monitorRoutes_1 = __importDefault(require("./routes/monitorRoutes"));
 const path_1 = __importDefault(require("path"));
 const saasJobs_1 = require("./cron/saasJobs");
 const startupLogs_1 = require("./utils/startupLogs");
+const models_1 = require("./models");
 // Inisialisasi model-model agar di-load oleh Sequelize
 require("./models");
 dotenv_1.default.config();
@@ -76,6 +77,62 @@ app.listen(port, async () => {
     (0, startupLogs_1.addStartupLog)(`🚀 Server berjalan di http://localhost:${port}`);
     // Connect ke database MySQL saat server dinyalakan
     await (0, database_1.connectDB)();
+    // Pastikan data SUPER_ADMIN selalu sinkron antara tabel users dan roles
+    await ensureSuperAdmin();
     // Jalankan Cron Jobs untuk SaaS
     (0, saasJobs_1.initSaasCronJobs)();
 });
+/**
+ * Memastikan data SUPER_ADMIN ada dan sinkron di tabel users dan roles.
+ * Dipanggil setiap kali server start untuk menjaga konsistensi data.
+ */
+async function ensureSuperAdmin() {
+    try {
+        // 1. Pastikan user SUPER_ADMIN ada di tabel users
+        const [superadmin, userCreated] = await models_1.User.findOrCreate({
+            where: { uid: 'SUPER_ADMIN' },
+            defaults: {
+                uid: 'SUPER_ADMIN',
+                name: 'Appsbee Support',
+                email: 'superadmin@appsbee.id',
+                status: 'ACTIVE',
+                isOnline: false,
+            }
+        });
+        if (userCreated) {
+            (0, startupLogs_1.addStartupLog)('✅ SUPER_ADMIN user dibuat di tabel users');
+        }
+        else {
+            // Pastikan status ACTIVE dan nama benar (update jika berbeda)
+            const needsUpdate = superadmin.getDataValue('status') !== 'ACTIVE' ||
+                superadmin.getDataValue('name') !== 'Appsbee Support';
+            if (needsUpdate) {
+                await superadmin.update({ status: 'ACTIVE', name: 'Appsbee Support' });
+                (0, startupLogs_1.addStartupLog)('🔄 SUPER_ADMIN user diperbarui di tabel users');
+            }
+            else {
+                (0, startupLogs_1.addStartupLog)('✅ SUPER_ADMIN user sudah ada dan sinkron');
+            }
+        }
+        // 2. Pastikan role SUPER_ADMIN ada di tabel roles
+        const [, roleCreated] = await models_1.Role.findOrCreate({
+            where: { id: 'role_super_admin' },
+            defaults: {
+                id: 'role_super_admin',
+                name: 'SUPER_ADMIN',
+                userId: 'SUPER_ADMIN',
+                villageId: null,
+            }
+        });
+        if (roleCreated) {
+            (0, startupLogs_1.addStartupLog)('✅ SUPER_ADMIN role dibuat di tabel roles');
+        }
+        else {
+            (0, startupLogs_1.addStartupLog)('✅ SUPER_ADMIN role sudah ada');
+        }
+    }
+    catch (error) {
+        (0, startupLogs_1.addStartupLog)(`⚠️ Gagal memastikan SUPER_ADMIN sinkron: ${error.message}`);
+        console.error('ensureSuperAdmin error:', error);
+    }
+}
