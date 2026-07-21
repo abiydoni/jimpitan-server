@@ -113,6 +113,14 @@ const getChatContacts = async (req, res) => {
         });
         let groups = [];
         if (villageId === 'ALL') {
+            // Grup untuk koordinasi antar admin desa (cocok dengan Flutter: GROUP_ADMINS)
+            groups.push({
+                uid: 'GROUP_ADMINS',
+                name: 'Grup Admin Pusat',
+                isGroup: true,
+                isOnline: false,
+            });
+            // Grup semua admin desa (legacy / web admin)
             groups.push({
                 uid: 'GROUP_ADMIN_DESA',
                 name: 'Grup Semua Admin Desa',
@@ -121,13 +129,13 @@ const getChatContacts = async (req, res) => {
             });
         }
         else {
-            // Jika di desa tertentu, mungkin grup desa tersebut saja
+            // Jika di desa tertentu, tampilkan grup RT desa tersebut
             const { Village } = require('../models');
             const village = await Village.findByPk(villageId);
             if (village) {
                 groups.push({
                     uid: `GROUP_${village.id}`,
-                    name: `Grup ${village.name}`,
+                    name: `Grup Warga RT - ${village.name}`,
                     isGroup: true,
                     isOnline: false,
                 });
