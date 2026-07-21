@@ -40,39 +40,36 @@ const sendMessage = async (req, res) => {
         // Respon ke client secepatnya, jangan tunggu notifikasi terkirim
         res.status(201).json({ success: true, message: 'Pesan terkirim' });
         // 2. Kirim notifikasi di background (setelah merespon client)
-        // Ini penting agar aplikasi tidak terasa lambat
         process.nextTick(async () => {
             try {
                 if (receiverUid) {
-                    // --- LOGIKA UNTUK PERSONAL CHAT ---
+                    // --- PERSONAL CHAT: kirim notifikasi ke penerima spesifik ---
                     const receiver = await models_1.User.findOne({ where: { uid: receiverUid } });
                     const receiverToken = receiver?.getDataValue('fcmToken');
                     if (receiverToken && typeof roomId === 'string') {
-                        await (0, firebaseService_1.sendChatNotification)(receiverToken, senderName, message, senderUid, actualVillageId, 
-                        // Untuk personal chat, kita bisa kirim roomId agar di client bisa langsung join
+                        await (0, firebaseService_1.sendChatNotification)(receiverToken, senderName, message, senderUid, actualVillageId || '', // FCM data harus string, gunakan '' jika null
                         roomId);
                     }
                 }
                 else if (roomId && typeof roomId === 'string' && roomId.startsWith('GROUP_')) {
-                    // --- LOGIKA UNTUK GROUP CHAT ---
-                    // Dapatkan semua user dalam desa (kecuali pengirim)
-                    // NOTE: Ini bisa dioptimalkan dengan tabel relasi user-group
-                    const usersInVillage = await models_1.User.findAll({
-                        where: {
-                            villageId: villageId,
-                            uid: { [sequelize_1.Op.ne]: senderUid }, // Gunakan Op yang sudah diimpor
-                        },
-                    });
-                    const tokens = usersInVillage
-                        .map(user => user.getDataValue('fcmToken'))
+                    // --- GROUP CHAT: kirim notifikasi ke semua user yang relevan ---
+                    // Jika villageId = 'ALL' (Super Admin), kirim ke SEMUA user aktif lintas desa
+                    // Jika villageId spesifik, kirim ke user dalam desa tersebut saja
+                    const whereClause = {
+                        uid: { [sequelize_1.Op.ne]: senderUid }, // Jangan kirim notif ke diri sendiri
+                        status: 'ACTIVE',
+                    };
+                    if (villageId !== 'ALL') {
+                        whereClause.villageId = villageId;
+                    }
+                    const recipients = await models_1.User.findAll({ where: whereClause });
+                    const tokens = recipients
+                        .map((user) => user.getDataValue('fcmToken'))
                         .filter((token) => !!token);
                     if (tokens.length > 0) {
-                        // Di sini kita bisa mengirim ke banyak token sekaligus (multicast)
-                        // atau mengirim satu per satu. Untuk simpelnya, kita loop.
                         for (const token of tokens) {
-                            await (0, firebaseService_1.sendChatNotification)(token, senderName, // atau nama grup
-                            `${senderName}: ${message}`, // Tambahkan nama pengirim di pesan grup
-                            senderUid, villageId, roomId);
+                            await (0, firebaseService_1.sendChatNotification)(token, senderName, `${senderName}: ${message}`, senderUid, villageId !== 'ALL' ? villageId : '', // Jangan kirim 'ALL' ke Flutter
+                            roomId);
                         }
                     }
                 }
