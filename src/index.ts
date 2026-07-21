@@ -90,59 +90,60 @@ app.listen(port, async () => {
   initSaasCronJobs();
 });
 
+
 /**
- * Memastikan data SUPER_ADMIN ada dan sinkron di tabel users dan roles.
- * Dipanggil setiap kali server start untuk menjaga konsistensi data.
+ * Memastikan data Super Admin resmi (appsbeem@gmail.com) ada dan sinkron
+ * di tabel users dan roles. Dipanggil setiap kali server start.
  */
 async function ensureSuperAdmin() {
-  try {
-    // 1. Pastikan user SUPER_ADMIN ada di tabel users
-    const [superadmin, userCreated] = await User.findOrCreate({
-      where: { uid: 'SUPER_ADMIN' },
-      defaults: {
-        uid: 'SUPER_ADMIN',
-        name: 'Appsbee Support',
-        email: 'superadmin@appsbee.id',
-        status: 'ACTIVE',
-        isOnline: false,
-      }
-    });
+  const SUPER_ADMIN_EMAIL = 'appsbeem@gmail.com';
 
-    if (userCreated) {
-      addStartupLog('✅ SUPER_ADMIN user dibuat di tabel users');
-    } else {
-      // Pastikan status ACTIVE dan nama benar (update jika berbeda)
-      const needsUpdate = 
-        superadmin.getDataValue('status') !== 'ACTIVE' ||
-        superadmin.getDataValue('name') !== 'Appsbee Support';
-      
-      if (needsUpdate) {
-        await superadmin.update({ status: 'ACTIVE', name: 'Appsbee Support' });
-        addStartupLog('🔄 SUPER_ADMIN user diperbarui di tabel users');
-      } else {
-        addStartupLog('✅ SUPER_ADMIN user sudah ada dan sinkron');
-      }
+  try {
+    // 1. Cari user Super Admin berdasarkan email resmi
+    const superadmin = await User.findOne({ where: { email: SUPER_ADMIN_EMAIL } });
+
+    if (!superadmin) {
+      // Belum login sama sekali — user akan otomatis terdaftar saat pertama login via Firebase Auth
+      addStartupLog(`⚠️ Super Admin (${SUPER_ADMIN_EMAIL}) belum ada di tabel users. Akan dibuat saat login pertama.`);
+      return;
     }
 
-    // 2. Pastikan role SUPER_ADMIN ada di tabel roles
+    const adminUid = superadmin.getDataValue('uid');
+    addStartupLog(`✅ Super Admin ditemukan: uid=${adminUid}, email=${SUPER_ADMIN_EMAIL}`);
+
+    // 2. Pastikan status ACTIVE
+    if (superadmin.getDataValue('status') !== 'ACTIVE') {
+      await superadmin.update({ status: 'ACTIVE' });
+      addStartupLog(`🔄 Status Super Admin diperbarui ke ACTIVE`);
+    }
+
+    // 3. Pastikan role SUPER_ADMIN ada untuk uid ini
     const [, roleCreated] = await Role.findOrCreate({
-      where: { id: 'role_super_admin' },
+      where: { userId: adminUid, name: 'SUPER_ADMIN' },
       defaults: {
-        id: 'role_super_admin',
+        id: `role_superadmin_${adminUid}`,
         name: 'SUPER_ADMIN',
-        userId: 'SUPER_ADMIN',
+        userId: adminUid,
         villageId: null,
       }
     });
 
     if (roleCreated) {
-      addStartupLog('✅ SUPER_ADMIN role dibuat di tabel roles');
+      addStartupLog(`✅ Role SUPER_ADMIN dibuat untuk uid=${adminUid}`);
     } else {
-      addStartupLog('✅ SUPER_ADMIN role sudah ada');
+      addStartupLog(`✅ Role SUPER_ADMIN sudah ada untuk uid=${adminUid}`);
+    }
+
+    // 4. Bersihkan entri dummy lama jika masih ada
+    const dummyDeleted = await User.destroy({ where: { uid: 'SUPER_ADMIN' } });
+    if (dummyDeleted > 0) {
+      addStartupLog(`🧹 Entri dummy uid='SUPER_ADMIN' dihapus dari tabel users`);
+      await Role.destroy({ where: { userId: 'SUPER_ADMIN' } });
+      addStartupLog(`🧹 Role dummy uid='SUPER_ADMIN' dihapus dari tabel roles`);
     }
 
   } catch (error: any) {
-    addStartupLog(`⚠️ Gagal memastikan SUPER_ADMIN sinkron: ${error.message}`);
+    addStartupLog(`⚠️ Gagal sinkronisasi Super Admin: ${error.message}`);
     console.error('ensureSuperAdmin error:', error);
   }
 }

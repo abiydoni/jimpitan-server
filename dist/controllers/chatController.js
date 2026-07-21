@@ -9,15 +9,9 @@ const sendMessage = async (req, res) => {
     const { villageId } = req.params;
     const { senderUid, receiverUid, roomId, senderName, message } = req.body;
     const firebaseUser = req.firebaseUser;
-    console.log('--- DEBUG SEND MESSAGE ---');
-    console.log('Headers Auth:', req.headers.authorization ? 'Ada' : 'Tidak Ada');
-    console.log('senderUid:', senderUid);
-    console.log('firebaseUser:', firebaseUser);
-    console.log('--------------------------');
-    // Izinkan jika ini adalah Super Admin (dari Web Dashboard) atau jika token valid
-    if (senderUid !== 'SUPER_ADMIN' && (!firebaseUser || firebaseUser.uid !== senderUid)) {
-        console.log('Ditolak karena tidak cocok UID atau token kosong');
-        res.status(403).json({ success: false, message: 'Akses ditolak' });
+    // Validasi: pengirim harus memiliki Firebase token yang valid dan sesuai
+    if (!firebaseUser || firebaseUser.uid !== senderUid) {
+        res.status(403).json({ success: false, message: 'Akses ditolak: token tidak valid atau tidak sesuai' });
         return;
     }
     if (!message || !senderName) {
