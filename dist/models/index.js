@@ -317,10 +317,11 @@ Role.belongsTo(User, { foreignKey: 'userId' });
 Village.hasMany(Menu, { foreignKey: 'villageId' });
 Menu.belongsTo(Village, { foreignKey: 'villageId' });
 // ChatMessage terkait dengan Sender, Receiver, dan Village
-User.hasMany(ChatMessage, { as: 'SentMessages', foreignKey: 'senderUid' });
-User.hasMany(ChatMessage, { as: 'ReceivedMessages', foreignKey: 'receiverUid' });
-ChatMessage.belongsTo(User, { as: 'Sender', foreignKey: 'senderUid' });
-ChatMessage.belongsTo(User, { as: 'Receiver', foreignKey: 'receiverUid' });
+// constraints: false agar SUPER_ADMIN (tidak ada di tabel users) bisa mengirim pesan
+User.hasMany(ChatMessage, { as: 'SentMessages', foreignKey: 'senderUid', constraints: false });
+User.hasMany(ChatMessage, { as: 'ReceivedMessages', foreignKey: 'receiverUid', constraints: false });
+ChatMessage.belongsTo(User, { as: 'Sender', foreignKey: 'senderUid', constraints: false });
+ChatMessage.belongsTo(User, { as: 'Receiver', foreignKey: 'receiverUid', constraints: false });
 Village.hasMany(ChatMessage, { foreignKey: 'villageId', constraints: false });
 ChatMessage.belongsTo(Village, { foreignKey: 'villageId', constraints: false }); // constraints: false agar tidak ada FK ke villages (Super Admin bisa kirim lintas desa)
 // Slide milik Village
