@@ -127,6 +127,17 @@ const getChatContacts = async (req, res) => {
                 isGroup: true,
                 isOnline: false,
             });
+            // Super admin harus bisa melihat semua grup desa
+            const { Village } = require('../models');
+            const allVillages = await Village.findAll({ where: { status: 'ACTIVE' } });
+            allVillages.forEach((v) => {
+                groups.push({
+                    uid: `GROUP_${v.id}`,
+                    name: `Grup Warga RT - ${v.name}`,
+                    isGroup: true,
+                    isOnline: false,
+                });
+            });
         }
         else {
             // Jika di desa tertentu, tampilkan grup RT desa tersebut
