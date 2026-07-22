@@ -129,7 +129,7 @@ const getChatContacts = async (req, res) => {
             });
             // Super admin harus bisa melihat semua grup desa
             const { Village } = require('../models');
-            const allVillages = await Village.findAll({ where: { status: 'ACTIVE' } });
+            const allVillages = await Village.findAll();
             allVillages.forEach((v) => {
                 groups.push({
                     uid: `GROUP_${v.id}`,
