@@ -142,13 +142,6 @@ export const getChatContacts = async (req: AuthRequest, res: Response): Promise<
         isGroup: true,
         isOnline: false,
       });
-      // Grup semua admin desa (legacy / web admin)
-      groups.push({
-        uid: 'GROUP_ADMIN_DESA',
-        name: 'Grup Semua Admin Desa',
-        isGroup: true,
-        isOnline: false,
-      });
 
       // Super admin harus bisa melihat semua grup desa
       const { Village } = require('../models');
