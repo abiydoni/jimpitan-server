@@ -163,8 +163,11 @@ const getMessages = async (req, res) => {
         if (roomId && typeof roomId === 'string' && roomId.startsWith('GROUP_')) {
             // Logika untuk mengambil pesan grup
             whereClause = { roomId };
-            if (villageId !== 'ALL')
-                whereClause.villageId = villageId;
+            if (villageId !== 'ALL') {
+                whereClause.villageId = {
+                    [sequelize_1.Op.or]: [villageId, null]
+                };
+            }
         }
         else {
             // Logika untuk mengambil pesan personal
@@ -176,8 +179,11 @@ const getMessages = async (req, res) => {
                     { senderUid: targetUid, receiverUid: uid },
                 ],
             };
-            if (villageId !== 'ALL')
-                whereClause.villageId = villageId;
+            if (villageId !== 'ALL') {
+                whereClause.villageId = {
+                    [sequelize_1.Op.or]: [villageId, null]
+                };
+            }
         }
         const messages = await models_1.ChatMessage.findAll({
             where: whereClause,

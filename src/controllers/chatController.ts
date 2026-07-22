@@ -190,7 +190,11 @@ export const getMessages = async (req: AuthRequest, res: Response): Promise<void
     if (roomId && typeof roomId === 'string' && roomId.startsWith('GROUP_')) {
       // Logika untuk mengambil pesan grup
       whereClause = { roomId };
-      if (villageId !== 'ALL') whereClause.villageId = villageId;
+      if (villageId !== 'ALL') {
+        whereClause.villageId = {
+          [Op.or]: [villageId, null]
+        };
+      }
     } else {
       // Logika untuk mengambil pesan personal
       // Cari berdasarkan pasangan senderUid <-> receiverUid saja (tanpa filter roomId)
@@ -201,7 +205,11 @@ export const getMessages = async (req: AuthRequest, res: Response): Promise<void
           { senderUid: targetUid, receiverUid: uid as string },
         ],
       };
-      if (villageId !== 'ALL') whereClause.villageId = villageId;
+      if (villageId !== 'ALL') {
+        whereClause.villageId = {
+          [Op.or]: [villageId, null]
+        };
+      }
     }
 
     const messages = await Message.findAll({
