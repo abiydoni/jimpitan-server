@@ -24,8 +24,8 @@ export const connectDB = async () => {
       addStartupLog('✅ Koneksi ke MySQL berhasil.');
 
       // Sinkronisasi model ke database (otomatis membuat tabel jika belum ada)
-      // Gunakan { alter: false } agar tidak terjadi error bentrok Foreign Key saat booting
-      await sequelize.sync({ alter: false });
+      // Gunakan { alter: true } untuk menerapkan perubahan schema (seperti allowNull: true)
+      await sequelize.sync({ alter: true });
       addStartupLog('✅ Semua model berhasil disinkronisasi ke database.');
       
       isConnected = true; // Berhenti dari loop jika sukses
