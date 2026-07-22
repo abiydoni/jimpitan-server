@@ -92,9 +92,7 @@ const getChatContacts = async (req, res) => {
     try {
         const { villageId } = req.params;
         // Jika villageId = 'ALL', ambil semua user di sistem (fitur khusus Super Admin)
-        const whereClause = {
-            status: 'ACTIVE'
-        };
+        const whereClause = {};
         if (villageId === 'ALL') {
             whereClause.uid = { [sequelize_1.Op.ne]: 'SUPER_ADMIN' }; // Jangan tampilkan Super Admin di daftar kontaknya sendiri
         }

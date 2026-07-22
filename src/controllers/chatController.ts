@@ -114,9 +114,7 @@ export const getChatContacts = async (req: AuthRequest, res: Response): Promise<
     const { villageId } = req.params;
     
     // Jika villageId = 'ALL', ambil semua user di sistem (fitur khusus Super Admin)
-    const whereClause: any = { 
-      status: 'ACTIVE'
-    };
+    const whereClause: any = {};
     
     if (villageId === 'ALL') {
       whereClause.uid = { [Op.ne]: 'SUPER_ADMIN' }; // Jangan tampilkan Super Admin di daftar kontaknya sendiri
