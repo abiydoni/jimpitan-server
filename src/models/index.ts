@@ -126,6 +126,10 @@ export class ChatMessage extends Model {
   public isDeleted!: boolean;
   public isEdited!: boolean;
   public villageId!: string;
+  public replyToId!: string | null;
+  public replyToMessage!: string | null;
+  public replyToSenderName!: string | null;
+  public isForwarded!: boolean;
 }
 ChatMessage.init({
   id: { type: DataTypes.STRING(128), primaryKey: true },
@@ -138,6 +142,10 @@ ChatMessage.init({
   isDeleted: { type: DataTypes.BOOLEAN, defaultValue: false },
   isEdited: { type: DataTypes.BOOLEAN, defaultValue: false },
   villageId: { type: DataTypes.STRING(128), allowNull: true }, // Nullable agar Super Admin bisa kirim pesan lintas desa
+  replyToId: { type: DataTypes.STRING(128), allowNull: true },
+  replyToMessage: { type: DataTypes.TEXT, allowNull: true },
+  replyToSenderName: { type: DataTypes.STRING(255), allowNull: true },
+  isForwarded: { type: DataTypes.BOOLEAN, defaultValue: false },
 }, { sequelize, modelName: 'chatMessage', tableName: 'chat_messages', timestamps: true });
 
 // ---------------------------

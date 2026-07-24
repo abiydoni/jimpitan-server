@@ -146,6 +146,10 @@ class ChatMessage extends sequelize_1.Model {
     isDeleted;
     isEdited;
     villageId;
+    replyToId;
+    replyToMessage;
+    replyToSenderName;
+    isForwarded;
 }
 exports.ChatMessage = ChatMessage;
 ChatMessage.init({
@@ -159,6 +163,10 @@ ChatMessage.init({
     isDeleted: { type: sequelize_1.DataTypes.BOOLEAN, defaultValue: false },
     isEdited: { type: sequelize_1.DataTypes.BOOLEAN, defaultValue: false },
     villageId: { type: sequelize_1.DataTypes.STRING(128), allowNull: true }, // Nullable agar Super Admin bisa kirim pesan lintas desa
+    replyToId: { type: sequelize_1.DataTypes.STRING(128), allowNull: true },
+    replyToMessage: { type: sequelize_1.DataTypes.TEXT, allowNull: true },
+    replyToSenderName: { type: sequelize_1.DataTypes.STRING(255), allowNull: true },
+    isForwarded: { type: sequelize_1.DataTypes.BOOLEAN, defaultValue: false },
 }, { sequelize: database_1.sequelize, modelName: 'chatMessage', tableName: 'chat_messages', timestamps: true });
 // ---------------------------
 // 5. Model Slide (Banner)

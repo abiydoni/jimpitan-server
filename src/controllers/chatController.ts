@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 export const sendMessage = async (req: AuthRequest, res: Response): Promise<void> => {
   const { villageId } = req.params;
-  const { senderUid, receiverUid, roomId, senderName, message } = req.body;
+  const { senderUid, receiverUid, roomId, senderName, message, replyToId, replyToMessage, replyToSenderName, isForwarded } = req.body;
   const firebaseUser = req.firebaseUser;
 
   // Validasi: pengirim harus memiliki Firebase token yang valid dan sesuai
@@ -41,6 +41,10 @@ export const sendMessage = async (req: AuthRequest, res: Response): Promise<void
       roomId,
       message,
       senderName,
+      replyToId,
+      replyToMessage,
+      replyToSenderName,
+      isForwarded: isForwarded || false,
     });
 
     // Respon ke client secepatnya, jangan tunggu notifikasi terkirim
