@@ -9,6 +9,17 @@ import { addJakartaDays, addJakartaMonths } from '../utils/jakartaTime';
 export const getPlans = async (req: Request, res: Response): Promise<void> => {
   try {
     const plans = await SubscriptionPlan.findAll();
+    // Urutkan dari masa paket terendah (ascending)
+    plans.sort((a, b) => {
+      const getMonths = (p: any) => {
+        const m = Number(p.getDataValue('durationMonths')) || 1;
+        const u = String(p.getDataValue('durationUnit')).toUpperCase();
+        if (u.includes('YEAR') || u.includes('TAHUN')) return m * 12;
+        if (u.includes('WEEK') || u.includes('MINGGU')) return m * 0.25;
+        return m;
+      };
+      return getMonths(a) - getMonths(b);
+    });
     res.json({ success: true, data: plans });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
@@ -18,7 +29,7 @@ export const getPlans = async (req: Request, res: Response): Promise<void> => {
 export const createPlan = async (req: Request, res: Response): Promise<void> => {
   try {
     const { name, basePrice, pricePerKk, maxKk, features, durationMonths, durationUnit } = req.body;
-    const plan = await SubscriptionPlan.create({ name, basePrice, pricePerKk, maxKk, features, durationMonths: durationMonths || 1, durationUnit: durationUnit || 'MONTHLY' });
+    const plan = await SubscriptionPlan.create({ name, basePrice, pricePerKk: pricePerKk || 0, maxKk, features, durationMonths: durationMonths || 1, durationUnit: durationUnit || 'MONTHLY' });
     res.status(201).json({ success: true, data: plan });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
