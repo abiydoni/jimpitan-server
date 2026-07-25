@@ -29,8 +29,9 @@ export const connectDB = async () => {
       addStartupLog('✅ Semua model berhasil disinkronisasi ke database.');
       
       isConnected = true; // Berhenti dari loop jika sukses
-    } catch (error) {
-      addStartupLog('❌ Gagal koneksi ke MySQL: ' + (error as Error).message);
+    } catch (error: any) {
+      console.error('❌ DB ERROR DETAIL:', error);
+      addStartupLog('❌ Gagal koneksi ke MySQL: ' + (error?.message || error?.parent?.message || JSON.stringify(error)));
       addStartupLog('⏳ Mencoba menyambungkan kembali dalam 5 detik...');
       
       // Tunggu 5 detik sebelum mencoba lagi

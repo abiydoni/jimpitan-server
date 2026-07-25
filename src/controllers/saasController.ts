@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { Village, SubscriptionPlan, VillageSubscription, Invoice, User, SystemSetting } from '../models';
 import { Op } from 'sequelize';
+import { addJakartaDays, addJakartaMonths } from '../utils/jakartaTime';
 
 // ==========================================
 // 1. Subscription Plan CRUD
@@ -99,15 +100,12 @@ export const assignSubscription = async (req: Request, res: Response): Promise<v
       
       const startDate = isStillActive ? sub.getDataValue('startDate') : new Date();
       const baseDate = isStillActive ? new Date(currentEndDate) : new Date();
-      
-      const newEndDate = new Date(baseDate);
-      newEndDate.setMonth(newEndDate.getMonth() + (months || 1));
+      const newEndDate = addJakartaMonths(baseDate, months || 1);
 
       await sub.update({ planId, status: 'ACTIVE', startDate, endDate: newEndDate });
     } else {
       const startDate = new Date();
-      const endDate = new Date();
-      endDate.setMonth(endDate.getMonth() + (months || 1));
+      const endDate = addJakartaMonths(startDate, months || 1);
       sub = await VillageSubscription.create({ villageId, planId, status: 'ACTIVE', startDate, endDate });
     }
     
@@ -161,8 +159,7 @@ export const approvePayment = async (req: Request, res: Response): Promise<void>
     const sub = await VillageSubscription.findOne({ where: { villageId: invoice.getDataValue('villageId') } });
     if (sub) {
       const monthsToAdd = parseInt(invoice.getDataValue('durationMonths') as any) || 1;
-      const newEndDate = new Date(sub.getDataValue('endDate'));
-      newEndDate.setMonth(newEndDate.getMonth() + monthsToAdd);
+      const newEndDate = addJakartaMonths(new Date(sub.getDataValue('endDate')), monthsToAdd);
       await sub.update({ status: 'ACTIVE', endDate: newEndDate });
     }
 
@@ -212,8 +209,7 @@ export const getVillageInvoice = async (req: Request, res: Response): Promise<vo
             const kkAmount = pricePerKk * kkCount;
             const totalAmount = baseAmount + kkAmount;
 
-            const dueDate = new Date();
-            dueDate.setDate(dueDate.getDate() + 7);
+            const dueDate = addJakartaDays(new Date(), 7);
 
             const newInvoice = await Invoice.create({
               villageId,
@@ -261,8 +257,7 @@ export const orderPlan = async (req: Request, res: Response): Promise<void> => {
     const kkAmount = (plan.getDataValue('pricePerKk') || 0) * kkCount;
     const totalAmount = parseFloat(baseAmount.toString()) + parseFloat(kkAmount.toString());
 
-    const dueDate = new Date();
-    dueDate.setDate(dueDate.getDate() + 3); // 3 days to pay
+    const dueDate = addJakartaDays(new Date(), 3); // 3 days to pay in Asia/Jakarta
 
     const invoice = await Invoice.create({
       villageId,

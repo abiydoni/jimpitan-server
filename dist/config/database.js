@@ -30,7 +30,8 @@ const connectDB = async () => {
             isConnected = true; // Berhenti dari loop jika sukses
         }
         catch (error) {
-            (0, startupLogs_1.addStartupLog)('❌ Gagal koneksi ke MySQL: ' + error.message);
+            console.error('❌ DB ERROR DETAIL:', error);
+            (0, startupLogs_1.addStartupLog)('❌ Gagal koneksi ke MySQL: ' + (error?.message || error?.parent?.message || JSON.stringify(error)));
             (0, startupLogs_1.addStartupLog)('⏳ Mencoba menyambungkan kembali dalam 5 detik...');
             // Tunggu 5 detik sebelum mencoba lagi
             await new Promise(resolve => setTimeout(resolve, 5000));

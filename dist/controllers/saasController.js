@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.updateSaasSettings = exports.getSaasSettings = exports.uploadPaymentProof = exports.orderPlan = exports.getVillageInvoice = exports.approvePayment = exports.getAllInvoices = exports.updateSubscription = exports.assignSubscription = exports.getVillageSubscription = exports.getVillageSubscriptions = exports.deletePlan = exports.updatePlan = exports.createPlan = exports.getPlans = void 0;
 const models_1 = require("../models");
 const sequelize_1 = require("sequelize");
+const jakartaTime_1 = require("../utils/jakartaTime");
 // ==========================================
 // 1. Subscription Plan CRUD
 // ==========================================
@@ -107,14 +108,12 @@ const assignSubscription = async (req, res) => {
             const isStillActive = currentEndDate && new Date(currentEndDate) > new Date();
             const startDate = isStillActive ? sub.getDataValue('startDate') : new Date();
             const baseDate = isStillActive ? new Date(currentEndDate) : new Date();
-            const newEndDate = new Date(baseDate);
-            newEndDate.setMonth(newEndDate.getMonth() + (months || 1));
+            const newEndDate = (0, jakartaTime_1.addJakartaMonths)(baseDate, months || 1);
             await sub.update({ planId, status: 'ACTIVE', startDate, endDate: newEndDate });
         }
         else {
             const startDate = new Date();
-            const endDate = new Date();
-            endDate.setMonth(endDate.getMonth() + (months || 1));
+            const endDate = (0, jakartaTime_1.addJakartaMonths)(startDate, months || 1);
             sub = await models_1.VillageSubscription.create({ villageId, planId, status: 'ACTIVE', startDate, endDate });
         }
         res.json({ success: true, data: sub });
@@ -171,8 +170,7 @@ const approvePayment = async (req, res) => {
         const sub = await models_1.VillageSubscription.findOne({ where: { villageId: invoice.getDataValue('villageId') } });
         if (sub) {
             const monthsToAdd = parseInt(invoice.getDataValue('durationMonths')) || 1;
-            const newEndDate = new Date(sub.getDataValue('endDate'));
-            newEndDate.setMonth(newEndDate.getMonth() + monthsToAdd);
+            const newEndDate = (0, jakartaTime_1.addJakartaMonths)(new Date(sub.getDataValue('endDate')), monthsToAdd);
             await sub.update({ status: 'ACTIVE', endDate: newEndDate });
         }
         res.json({ success: true, message: 'Payment approved, subscription extended.' });
@@ -217,8 +215,7 @@ const getVillageInvoice = async (req, res) => {
                         const baseAmount = basePrice;
                         const kkAmount = pricePerKk * kkCount;
                         const totalAmount = baseAmount + kkAmount;
-                        const dueDate = new Date();
-                        dueDate.setDate(dueDate.getDate() + 7);
+                        const dueDate = (0, jakartaTime_1.addJakartaDays)(new Date(), 7);
                         const newInvoice = await models_1.Invoice.create({
                             villageId,
                             baseAmount,
@@ -266,8 +263,7 @@ const orderPlan = async (req, res) => {
         const baseAmount = plan.getDataValue('basePrice') || 0;
         const kkAmount = (plan.getDataValue('pricePerKk') || 0) * kkCount;
         const totalAmount = parseFloat(baseAmount.toString()) + parseFloat(kkAmount.toString());
-        const dueDate = new Date();
-        dueDate.setDate(dueDate.getDate() + 3); // 3 days to pay
+        const dueDate = (0, jakartaTime_1.addJakartaDays)(new Date(), 3); // 3 days to pay in Asia/Jakarta
         const invoice = await models_1.Invoice.create({
             villageId,
             baseAmount,

@@ -8,6 +8,7 @@ const node_cron_1 = __importDefault(require("node-cron"));
 const sequelize_1 = require("sequelize");
 const models_1 = require("../models");
 const startupLogs_1 = require("../utils/startupLogs");
+const jakartaTime_1 = require("../utils/jakartaTime");
 // Fungsi untuk menjadwalkan semua tugas latar belakang SaaS
 const initSaasCronJobs = () => {
     (0, startupLogs_1.addStartupLog)('✅ Cron Jobs SaaS diinisialisasi (Berjalan setiap jam 00:00)');
@@ -88,10 +89,7 @@ const generateInvoices = async () => {
  * Jika ditemukan, ubah status village_subscriptions menjadi SUSPENDED.
  */
 const executeAutoSuspend = async () => {
-    const today = new Date();
-    const gracePeriodEnd = new Date();
-    gracePeriodEnd.setDate(today.getDate() - 3);
-    gracePeriodEnd.setHours(23, 59, 59, 999);
+    const gracePeriodEnd = (0, jakartaTime_1.addJakartaDays)(new Date(), -3);
     // Cari invoice UNPAID yang sudah melebihi masa tenggang (dueDate < H-3)
     const expiredInvoices = await models_1.Invoice.findAll({
         where: {

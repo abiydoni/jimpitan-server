@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { Op } from 'sequelize';
 import { VillageSubscription, SubscriptionPlan, Invoice, User, Village } from '../models';
 import { addStartupLog } from '../utils/startupLogs';
+import { addJakartaDays } from '../utils/jakartaTime';
 
 // Fungsi untuk menjadwalkan semua tugas latar belakang SaaS
 export const initSaasCronJobs = () => {
@@ -93,10 +94,7 @@ const generateInvoices = async () => {
  * Jika ditemukan, ubah status village_subscriptions menjadi SUSPENDED.
  */
 const executeAutoSuspend = async () => {
-  const today = new Date();
-  const gracePeriodEnd = new Date();
-  gracePeriodEnd.setDate(today.getDate() - 3);
-  gracePeriodEnd.setHours(23, 59, 59, 999);
+  const gracePeriodEnd = addJakartaDays(new Date(), -3);
 
   // Cari invoice UNPAID yang sudah melebihi masa tenggang (dueDate < H-3)
   const expiredInvoices = await Invoice.findAll({
