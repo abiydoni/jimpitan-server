@@ -177,10 +177,59 @@ export const approvePayment = async (req: Request, res: Response): Promise<void>
 export const getVillageInvoice = async (req: Request, res: Response): Promise<void> => {
   try {
     const { villageId } = req.params;
-    const invoices = await Invoice.findAll({
+    let invoices = await Invoice.findAll({
       where: { villageId },
       order: [['createdAt', 'DESC']]
     });
+
+    const hasActiveInvoice = invoices.some(inv => {
+      const st = inv.getDataValue('status');
+      return st === 'UNPAID' || st === 'PENDING_VERIFICATION';
+    });
+
+    if (!hasActiveInvoice) {
+      const sub = await VillageSubscription.findOne({
+        where: { villageId },
+        include: [{ model: SubscriptionPlan, as: 'plan' }]
+      });
+      if (sub) {
+        const plan = sub.getDataValue('plan');
+        if (plan) {
+          const basePrice = Number(plan.basePrice || 0);
+          const pricePerKk = Number(plan.pricePerKk || 0);
+          const planName = String(plan.name || '').toLowerCase();
+          const isTrial = planName.includes('trial') || planName.includes('uji') || (basePrice === 0 && pricePerKk === 0);
+
+          if (!isTrial) {
+            const kkCount = await User.count({
+              where: { villageId, familyId: { [Op.ne]: null } },
+              col: 'familyId',
+              distinct: true
+            }) || 0;
+
+            const baseAmount = basePrice;
+            const kkAmount = pricePerKk * kkCount;
+            const totalAmount = baseAmount + kkAmount;
+
+            const dueDate = new Date();
+            dueDate.setDate(dueDate.getDate() + 7);
+
+            const newInvoice = await Invoice.create({
+              villageId,
+              baseAmount,
+              kkAmount,
+              totalAmount,
+              kkCount,
+              status: 'UNPAID',
+              dueDate
+            });
+
+            invoices = [newInvoice, ...invoices];
+          }
+        }
+      }
+    }
+
     res.json({ success: true, data: invoices });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
@@ -198,8 +247,12 @@ export const orderPlan = async (req: Request, res: Response): Promise<void> => {
     const village = await Village.findByPk(villageId as string);
     if (!village) { res.status(404).json({ success: false, message: 'Village not found' }); return; }
 
-    // Count KK (stub to 0 if not calculated yet)
-    const kkCount = 0; 
+    // Count KK based on distinct familyId
+    const kkCount = await User.count({
+      where: { villageId, familyId: { [Op.ne]: null } },
+      col: 'familyId',
+      distinct: true
+    }) || 0; 
     const baseAmount = plan.getDataValue('basePrice') || 0;
     const kkAmount = (plan.getDataValue('pricePerKk') || 0) * kkCount;
     const totalAmount = parseFloat(baseAmount.toString()) + parseFloat(kkAmount.toString());

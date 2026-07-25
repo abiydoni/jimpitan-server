@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.updateSaasSettings = exports.getSaasSettings = exports.uploadPaymentProof = exports.orderPlan = exports.getVillageInvoice = exports.approvePayment = exports.getAllInvoices = exports.updateSubscription = exports.assignSubscription = exports.getVillageSubscription = exports.getVillageSubscriptions = exports.deletePlan = exports.updatePlan = exports.createPlan = exports.getPlans = void 0;
 const models_1 = require("../models");
+const sequelize_1 = require("sequelize");
 // ==========================================
 // 1. Subscription Plan CRUD
 // ==========================================
@@ -186,10 +187,51 @@ exports.approvePayment = approvePayment;
 const getVillageInvoice = async (req, res) => {
     try {
         const { villageId } = req.params;
-        const invoices = await models_1.Invoice.findAll({
+        let invoices = await models_1.Invoice.findAll({
             where: { villageId },
             order: [['createdAt', 'DESC']]
         });
+        const hasActiveInvoice = invoices.some(inv => {
+            const st = inv.getDataValue('status');
+            return st === 'UNPAID' || st === 'PENDING_VERIFICATION';
+        });
+        if (!hasActiveInvoice) {
+            const sub = await models_1.VillageSubscription.findOne({
+                where: { villageId },
+                include: [{ model: models_1.SubscriptionPlan, as: 'plan' }]
+            });
+            if (sub) {
+                const plan = sub.getDataValue('plan');
+                if (plan) {
+                    const basePrice = Number(plan.basePrice || 0);
+                    const pricePerKk = Number(plan.pricePerKk || 0);
+                    const planName = String(plan.name || '').toLowerCase();
+                    const isTrial = planName.includes('trial') || planName.includes('uji') || (basePrice === 0 && pricePerKk === 0);
+                    if (!isTrial) {
+                        const kkCount = await models_1.User.count({
+                            where: { villageId, familyId: { [sequelize_1.Op.ne]: null } },
+                            col: 'familyId',
+                            distinct: true
+                        }) || 0;
+                        const baseAmount = basePrice;
+                        const kkAmount = pricePerKk * kkCount;
+                        const totalAmount = baseAmount + kkAmount;
+                        const dueDate = new Date();
+                        dueDate.setDate(dueDate.getDate() + 7);
+                        const newInvoice = await models_1.Invoice.create({
+                            villageId,
+                            baseAmount,
+                            kkAmount,
+                            totalAmount,
+                            kkCount,
+                            status: 'UNPAID',
+                            dueDate
+                        });
+                        invoices = [newInvoice, ...invoices];
+                    }
+                }
+            }
+        }
         res.json({ success: true, data: invoices });
     }
     catch (error) {
@@ -211,8 +253,12 @@ const orderPlan = async (req, res) => {
             res.status(404).json({ success: false, message: 'Village not found' });
             return;
         }
-        // Count KK (stub to 0 if not calculated yet)
-        const kkCount = 0;
+        // Count KK based on distinct familyId
+        const kkCount = await models_1.User.count({
+            where: { villageId, familyId: { [sequelize_1.Op.ne]: null } },
+            col: 'familyId',
+            distinct: true
+        }) || 0;
         const baseAmount = plan.getDataValue('basePrice') || 0;
         const kkAmount = (plan.getDataValue('pricePerKk') || 0) * kkCount;
         const totalAmount = parseFloat(baseAmount.toString()) + parseFloat(kkAmount.toString());
