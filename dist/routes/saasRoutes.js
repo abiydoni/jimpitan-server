@@ -6,6 +6,9 @@ const router = (0, express_1.Router)();
 // ==========================================
 // RUTE SUPERADMIN (Manajemen SaaS)
 // ==========================================
+// Settings
+router.get('/settings', saasController_1.getSaasSettings);
+router.put('/settings', saasController_1.updateSaasSettings);
 // Plans
 router.get('/plans', saasController_1.getPlans);
 router.post('/plans', saasController_1.createPlan);
@@ -23,4 +26,6 @@ router.post('/invoices/:id/approve', saasController_1.approvePayment);
 // ==========================================
 // Get invoice untuk desa spesifik
 router.get('/village/:villageId/invoices', saasController_1.getVillageInvoice);
+router.post('/village/:villageId/invoices/order', saasController_1.orderPlan);
+router.post('/invoices/:id/upload-proof', saasController_1.uploadPaymentProof);
 exports.default = router;

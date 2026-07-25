@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { Village, SubscriptionPlan, VillageSubscription, Invoice, User } from '../models';
+import { Village, SubscriptionPlan, VillageSubscription, Invoice, User, SystemSetting } from '../models';
 import { Op } from 'sequelize';
 
 // ==========================================
@@ -161,6 +161,89 @@ export const getVillageInvoice = async (req: Request, res: Response): Promise<vo
       order: [['createdAt', 'DESC']]
     });
     res.json({ success: true, data: invoices });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const orderPlan = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { villageId } = req.params;
+    const { planId } = req.body;
+    
+    const plan = await SubscriptionPlan.findByPk(planId);
+    if (!plan) { res.status(404).json({ success: false, message: 'Plan not found' }); return; }
+
+    const village = await Village.findByPk(villageId as string);
+    if (!village) { res.status(404).json({ success: false, message: 'Village not found' }); return; }
+
+    // Count KK (stub to 0 if not calculated yet)
+    const kkCount = 0; 
+    const baseAmount = plan.getDataValue('basePrice') || 0;
+    const kkAmount = (plan.getDataValue('pricePerKk') || 0) * kkCount;
+    const totalAmount = parseFloat(baseAmount.toString()) + parseFloat(kkAmount.toString());
+
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + 3); // 3 days to pay
+
+    const invoice = await Invoice.create({
+      villageId,
+      baseAmount,
+      kkAmount,
+      totalAmount,
+      kkCount,
+      status: 'UNPAID',
+      dueDate,
+    });
+
+    res.json({ success: true, data: invoice });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const uploadPaymentProof = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { paymentProof } = req.body;
+    
+    const invoice = await Invoice.findByPk(id as string);
+    if (!invoice) { res.status(404).json({ success: false, message: 'Invoice not found' }); return; }
+
+    await invoice.update({ paymentProof, status: 'PENDING_VERIFICATION' });
+    res.json({ success: true, data: invoice });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ==========================================
+// 5. System Settings
+// ==========================================
+export const getSaasSettings = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const settings = await SystemSetting.findAll();
+    res.json({ success: true, data: settings });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const updateSaasSettings = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { bankAccountInfo } = req.body; // e.g. "BCA 12345678 a/n Jimpitan"
+    
+    // Upsert
+    const [setting, created] = await SystemSetting.findOrCreate({
+      where: { key: 'BANK_ACCOUNT_INFO' },
+      defaults: { value: bankAccountInfo }
+    });
+    
+    if (!created) {
+      await setting.update({ value: bankAccountInfo });
+    }
+    
+    res.json({ success: true, data: setting });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }

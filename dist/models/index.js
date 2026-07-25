@@ -14,7 +14,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sequelize = exports.JimpitanHistory = exports.DuesJournal = exports.InventoryLoan = exports.InventoryItem = exports.Exemption = exports.Tariff = exports.Schedule = exports.Slide = exports.ChatMessage = exports.Menu = exports.UserRole = exports.Role = exports.User = exports.Village = void 0;
+exports.sequelize = exports.SystemSetting = exports.JimpitanHistory = exports.DuesJournal = exports.InventoryLoan = exports.InventoryItem = exports.Exemption = exports.Tariff = exports.Schedule = exports.Slide = exports.ChatMessage = exports.Menu = exports.UserRole = exports.Role = exports.User = exports.Village = void 0;
 const sequelize_1 = require("sequelize");
 const database_1 = require("../config/database");
 Object.defineProperty(exports, "sequelize", { enumerable: true, get: function () { return database_1.sequelize; } });
@@ -294,6 +294,17 @@ JimpitanHistory.init({
     timestamp: { type: sequelize_1.DataTypes.STRING(128), allowNull: true },
     type: { type: sequelize_1.DataTypes.STRING(50), allowNull: true },
 }, { sequelize: database_1.sequelize, modelName: 'jimpitanHistory', tableName: 'jimpitan_history', timestamps: true, updatedAt: false });
+// ---------------------------
+// 9. Model SystemSetting
+// ---------------------------
+class SystemSetting extends sequelize_1.Model {
+}
+exports.SystemSetting = SystemSetting;
+SystemSetting.init({
+    key: { type: sequelize_1.DataTypes.STRING(100), primaryKey: true },
+    value: { type: sequelize_1.DataTypes.TEXT, allowNull: true },
+    description: { type: sequelize_1.DataTypes.STRING(255), allowNull: true },
+}, { sequelize: database_1.sequelize, modelName: 'systemSetting', tableName: 'system_settings', timestamps: true });
 // ==========================================
 // PENGATURAN RELASI (FOREIGN KEYS)
 // ==========================================

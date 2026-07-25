@@ -45,6 +45,7 @@ Invoice.init({
     kkAmount: { type: sequelize_1.DataTypes.DECIMAL(10, 2), allowNull: false },
     totalAmount: { type: sequelize_1.DataTypes.DECIMAL(10, 2), allowNull: false },
     kkCount: { type: sequelize_1.DataTypes.INTEGER, allowNull: false },
-    status: { type: sequelize_1.DataTypes.ENUM('UNPAID', 'PAID', 'EXPIRED'), defaultValue: 'UNPAID' },
+    status: { type: sequelize_1.DataTypes.ENUM('UNPAID', 'PENDING_VERIFICATION', 'PAID', 'EXPIRED'), defaultValue: 'UNPAID' },
     dueDate: { type: sequelize_1.DataTypes.DATE, allowNull: false },
+    paymentProof: { type: sequelize_1.DataTypes.TEXT('long'), allowNull: true },
 }, { sequelize: database_1.sequelize, modelName: 'invoice', tableName: 'invoices', timestamps: true });

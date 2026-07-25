@@ -267,6 +267,16 @@ JimpitanHistory.init({
 }, { sequelize, modelName: 'jimpitanHistory', tableName: 'jimpitan_history', timestamps: true, updatedAt: false });
 
 
+// ---------------------------
+// 9. Model SystemSetting
+// ---------------------------
+export class SystemSetting extends Model {}
+SystemSetting.init({
+  key: { type: DataTypes.STRING(100), primaryKey: true },
+  value: { type: DataTypes.TEXT, allowNull: true },
+  description: { type: DataTypes.STRING(255), allowNull: true },
+}, { sequelize, modelName: 'systemSetting', tableName: 'system_settings', timestamps: true });
+
 // ==========================================
 // PENGATURAN RELASI (FOREIGN KEYS)
 // ==========================================

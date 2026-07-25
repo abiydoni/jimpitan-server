@@ -3,7 +3,8 @@ import {
   getPlans, createPlan, updatePlan, deletePlan,
   getVillageSubscriptions, assignSubscription, updateSubscription,
   getAllInvoices, approvePayment,
-  getVillageInvoice
+  getVillageInvoice, orderPlan, uploadPaymentProof,
+  getSaasSettings, updateSaasSettings
 } from '../controllers/saasController';
 
 const router = Router();
@@ -11,6 +12,10 @@ const router = Router();
 // ==========================================
 // RUTE SUPERADMIN (Manajemen SaaS)
 // ==========================================
+
+// Settings
+router.get('/settings', getSaasSettings);
+router.put('/settings', updateSaasSettings);
 
 // Plans
 router.get('/plans', getPlans);
@@ -33,5 +38,7 @@ router.post('/invoices/:id/approve', approvePayment);
 
 // Get invoice untuk desa spesifik
 router.get('/village/:villageId/invoices', getVillageInvoice);
+router.post('/village/:villageId/invoices/order', orderPlan);
+router.post('/invoices/:id/upload-proof', uploadPaymentProof);
 
 export default router;

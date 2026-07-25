@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getVillageInvoice = exports.approvePayment = exports.getAllInvoices = exports.updateSubscription = exports.assignSubscription = exports.getVillageSubscriptions = exports.deletePlan = exports.updatePlan = exports.createPlan = exports.getPlans = void 0;
+exports.updateSaasSettings = exports.getSaasSettings = exports.uploadPaymentProof = exports.orderPlan = exports.getVillageInvoice = exports.approvePayment = exports.getAllInvoices = exports.updateSubscription = exports.assignSubscription = exports.getVillageSubscriptions = exports.deletePlan = exports.updatePlan = exports.createPlan = exports.getPlans = void 0;
 const models_1 = require("../models");
 // ==========================================
 // 1. Subscription Plan CRUD
@@ -176,3 +176,88 @@ const getVillageInvoice = async (req, res) => {
     }
 };
 exports.getVillageInvoice = getVillageInvoice;
+const orderPlan = async (req, res) => {
+    try {
+        const { villageId } = req.params;
+        const { planId } = req.body;
+        const plan = await models_1.SubscriptionPlan.findByPk(planId);
+        if (!plan) {
+            res.status(404).json({ success: false, message: 'Plan not found' });
+            return;
+        }
+        const village = await models_1.Village.findByPk(villageId);
+        if (!village) {
+            res.status(404).json({ success: false, message: 'Village not found' });
+            return;
+        }
+        // Count KK (stub to 0 if not calculated yet)
+        const kkCount = 0;
+        const baseAmount = plan.getDataValue('basePrice') || 0;
+        const kkAmount = (plan.getDataValue('pricePerKk') || 0) * kkCount;
+        const totalAmount = parseFloat(baseAmount.toString()) + parseFloat(kkAmount.toString());
+        const dueDate = new Date();
+        dueDate.setDate(dueDate.getDate() + 3); // 3 days to pay
+        const invoice = await models_1.Invoice.create({
+            villageId,
+            baseAmount,
+            kkAmount,
+            totalAmount,
+            kkCount,
+            status: 'UNPAID',
+            dueDate,
+        });
+        res.json({ success: true, data: invoice });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+exports.orderPlan = orderPlan;
+const uploadPaymentProof = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { paymentProof } = req.body;
+        const invoice = await models_1.Invoice.findByPk(id);
+        if (!invoice) {
+            res.status(404).json({ success: false, message: 'Invoice not found' });
+            return;
+        }
+        await invoice.update({ paymentProof, status: 'PENDING_VERIFICATION' });
+        res.json({ success: true, data: invoice });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+exports.uploadPaymentProof = uploadPaymentProof;
+// ==========================================
+// 5. System Settings
+// ==========================================
+const getSaasSettings = async (req, res) => {
+    try {
+        const settings = await models_1.SystemSetting.findAll();
+        res.json({ success: true, data: settings });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+exports.getSaasSettings = getSaasSettings;
+const updateSaasSettings = async (req, res) => {
+    try {
+        const { bankAccountInfo } = req.body; // e.g. "BCA 12345678 a/n Jimpitan"
+        // Upsert
+        const [setting, created] = await models_1.SystemSetting.findOrCreate({
+            where: { key: 'BANK_ACCOUNT_INFO' },
+            defaults: { value: bankAccountInfo }
+        });
+        if (!created) {
+            await setting.update({ value: bankAccountInfo });
+        }
+        res.json({ success: true, data: setting });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+exports.updateSaasSettings = updateSaasSettings;
