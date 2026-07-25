@@ -43,6 +43,18 @@ const connectDB = async () => {
             }
             catch (e) { }
             try {
+                await exports.sequelize.query("ALTER TABLE invoices ADD COLUMN planName VARCHAR(255) NULL;");
+            }
+            catch (e) { }
+            try {
+                await exports.sequelize.query("ALTER TABLE invoices ADD COLUMN durationMonths INT NULL DEFAULT 1;");
+            }
+            catch (e) { }
+            try {
+                await exports.sequelize.query("ALTER TABLE invoices ADD COLUMN durationUnit VARCHAR(50) NULL DEFAULT 'MONTHLY';");
+            }
+            catch (e) { }
+            try {
                 await exports.sequelize.query("CREATE TABLE IF NOT EXISTS `system_settings` (`key` VARCHAR(100) NOT NULL PRIMARY KEY, `value` TEXT NULL, `description` VARCHAR(255) NULL, `createdAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, `updatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
             }
             catch (e) { }

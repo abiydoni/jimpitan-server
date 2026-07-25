@@ -254,18 +254,30 @@ export const getVillageInvoice = async (req: Request, res: Response): Promise<vo
                 durationUnit: plan.getDataValue('durationUnit') || 'MONTHLY',
               });
             } catch (createErr: any) {
-              newInvoice = await Invoice.create({
-                villageId,
-                baseAmount,
-                kkAmount,
-                totalAmount,
-                kkCount,
-                status: 'UNPAID',
-                dueDate,
-                planName: plan.getDataValue('name'),
-                durationMonths: plan.getDataValue('durationMonths') || 1,
-                durationUnit: plan.getDataValue('durationUnit') || 'MONTHLY',
-              } as any);
+              try {
+                newInvoice = await Invoice.create({
+                  villageId,
+                  baseAmount,
+                  kkAmount,
+                  totalAmount,
+                  kkCount,
+                  status: 'UNPAID',
+                  dueDate,
+                  planName: plan.getDataValue('name'),
+                  durationMonths: plan.getDataValue('durationMonths') || 1,
+                  durationUnit: plan.getDataValue('durationUnit') || 'MONTHLY',
+                } as any);
+              } catch (err2: any) {
+                newInvoice = await Invoice.create({
+                  villageId,
+                  baseAmount,
+                  kkAmount,
+                  totalAmount,
+                  kkCount,
+                  status: 'UNPAID',
+                  dueDate,
+                } as any);
+              }
             }
 
             invoices = [newInvoice, ...invoices];
@@ -328,19 +340,32 @@ export const orderPlan = async (req: Request, res: Response): Promise<void> => {
         durationUnit: plan.getDataValue('durationUnit') || 'MONTHLY',
       });
     } catch (createErr: any) {
-      console.warn('Fallback Invoice.create without tax columns in orderPlan:', createErr.message);
-      invoice = await Invoice.create({
-        villageId,
-        baseAmount,
-        kkAmount,
-        totalAmount,
-        kkCount,
-        status: 'UNPAID',
-        dueDate,
-        planName: plan.getDataValue('name'),
-        durationMonths: plan.getDataValue('durationMonths') || 1,
-        durationUnit: plan.getDataValue('durationUnit') || 'MONTHLY',
-      } as any);
+      console.warn('Fallback Invoice.create 1 (without tax) in orderPlan:', createErr.message);
+      try {
+        invoice = await Invoice.create({
+          villageId,
+          baseAmount,
+          kkAmount,
+          totalAmount,
+          kkCount,
+          status: 'UNPAID',
+          dueDate,
+          planName: plan.getDataValue('name'),
+          durationMonths: plan.getDataValue('durationMonths') || 1,
+          durationUnit: plan.getDataValue('durationUnit') || 'MONTHLY',
+        } as any);
+      } catch (err2: any) {
+        console.warn('Fallback Invoice.create 2 (minimal day 1 columns) in orderPlan:', err2.message);
+        invoice = await Invoice.create({
+          villageId,
+          baseAmount,
+          kkAmount,
+          totalAmount,
+          kkCount,
+          status: 'UNPAID',
+          dueDate,
+        } as any);
+      }
     }
 
     res.json({ success: true, data: invoice });

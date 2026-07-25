@@ -265,18 +265,31 @@ const getVillageInvoice = async (req, res) => {
                             });
                         }
                         catch (createErr) {
-                            newInvoice = await models_1.Invoice.create({
-                                villageId,
-                                baseAmount,
-                                kkAmount,
-                                totalAmount,
-                                kkCount,
-                                status: 'UNPAID',
-                                dueDate,
-                                planName: plan.getDataValue('name'),
-                                durationMonths: plan.getDataValue('durationMonths') || 1,
-                                durationUnit: plan.getDataValue('durationUnit') || 'MONTHLY',
-                            });
+                            try {
+                                newInvoice = await models_1.Invoice.create({
+                                    villageId,
+                                    baseAmount,
+                                    kkAmount,
+                                    totalAmount,
+                                    kkCount,
+                                    status: 'UNPAID',
+                                    dueDate,
+                                    planName: plan.getDataValue('name'),
+                                    durationMonths: plan.getDataValue('durationMonths') || 1,
+                                    durationUnit: plan.getDataValue('durationUnit') || 'MONTHLY',
+                                });
+                            }
+                            catch (err2) {
+                                newInvoice = await models_1.Invoice.create({
+                                    villageId,
+                                    baseAmount,
+                                    kkAmount,
+                                    totalAmount,
+                                    kkCount,
+                                    status: 'UNPAID',
+                                    dueDate,
+                                });
+                            }
                         }
                         invoices = [newInvoice, ...invoices];
                     }
@@ -341,19 +354,33 @@ const orderPlan = async (req, res) => {
             });
         }
         catch (createErr) {
-            console.warn('Fallback Invoice.create without tax columns in orderPlan:', createErr.message);
-            invoice = await models_1.Invoice.create({
-                villageId,
-                baseAmount,
-                kkAmount,
-                totalAmount,
-                kkCount,
-                status: 'UNPAID',
-                dueDate,
-                planName: plan.getDataValue('name'),
-                durationMonths: plan.getDataValue('durationMonths') || 1,
-                durationUnit: plan.getDataValue('durationUnit') || 'MONTHLY',
-            });
+            console.warn('Fallback Invoice.create 1 (without tax) in orderPlan:', createErr.message);
+            try {
+                invoice = await models_1.Invoice.create({
+                    villageId,
+                    baseAmount,
+                    kkAmount,
+                    totalAmount,
+                    kkCount,
+                    status: 'UNPAID',
+                    dueDate,
+                    planName: plan.getDataValue('name'),
+                    durationMonths: plan.getDataValue('durationMonths') || 1,
+                    durationUnit: plan.getDataValue('durationUnit') || 'MONTHLY',
+                });
+            }
+            catch (err2) {
+                console.warn('Fallback Invoice.create 2 (minimal day 1 columns) in orderPlan:', err2.message);
+                invoice = await models_1.Invoice.create({
+                    villageId,
+                    baseAmount,
+                    kkAmount,
+                    totalAmount,
+                    kkCount,
+                    status: 'UNPAID',
+                    dueDate,
+                });
+            }
         }
         res.json({ success: true, data: invoice });
     }
