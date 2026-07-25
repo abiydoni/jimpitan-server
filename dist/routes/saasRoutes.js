@@ -24,6 +24,9 @@ router.post('/invoices/:id/approve', saasController_1.approvePayment);
 // ==========================================
 // RUTE PUBLIK / PENGGUNA (Untuk Warga / RT)
 // ==========================================
+// Get subscription untuk desa spesifik
+router.get('/village-subscription/:villageId', saasController_1.getVillageSubscription);
+router.get('/village/:villageId/subscription', saasController_1.getVillageSubscription);
 // Get invoice untuk desa spesifik
 router.get('/village/:villageId/invoices', saasController_1.getVillageInvoice);
 router.post('/village/:villageId/invoices/order', saasController_1.orderPlan);

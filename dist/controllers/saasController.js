@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateSaasSettings = exports.getSaasSettings = exports.uploadPaymentProof = exports.orderPlan = exports.getVillageInvoice = exports.approvePayment = exports.getAllInvoices = exports.updateSubscription = exports.assignSubscription = exports.getVillageSubscriptions = exports.deletePlan = exports.updatePlan = exports.createPlan = exports.getPlans = void 0;
+exports.updateSaasSettings = exports.getSaasSettings = exports.uploadPaymentProof = exports.orderPlan = exports.getVillageInvoice = exports.approvePayment = exports.getAllInvoices = exports.updateSubscription = exports.assignSubscription = exports.getVillageSubscription = exports.getVillageSubscriptions = exports.deletePlan = exports.updatePlan = exports.createPlan = exports.getPlans = void 0;
 const models_1 = require("../models");
 // ==========================================
 // 1. Subscription Plan CRUD
@@ -76,6 +76,27 @@ const getVillageSubscriptions = async (req, res) => {
     }
 };
 exports.getVillageSubscriptions = getVillageSubscriptions;
+const getVillageSubscription = async (req, res) => {
+    try {
+        const { villageId } = req.params;
+        const sub = await models_1.VillageSubscription.findOne({
+            where: { villageId: villageId },
+            include: [
+                { model: models_1.Village, as: 'village', attributes: ['name', 'uniqueCode'] },
+                { model: models_1.SubscriptionPlan, as: 'plan', attributes: ['name', 'basePrice', 'pricePerKk'] }
+            ]
+        });
+        if (!sub) {
+            res.status(404).json({ success: false, message: 'Subscription not found' });
+            return;
+        }
+        res.json({ success: true, data: sub });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+exports.getVillageSubscription = getVillageSubscription;
 const assignSubscription = async (req, res) => {
     try {
         const { villageId, planId, months } = req.body;

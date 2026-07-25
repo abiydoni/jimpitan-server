@@ -67,6 +67,27 @@ export const getVillageSubscriptions = async (req: Request, res: Response): Prom
   }
 };
 
+export const getVillageSubscription = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { villageId } = req.params;
+    const sub = await VillageSubscription.findOne({
+      where: { villageId: villageId as string },
+      include: [
+        { model: Village, as: 'village', attributes: ['name', 'uniqueCode'] },
+        { model: SubscriptionPlan, as: 'plan', attributes: ['name', 'basePrice', 'pricePerKk'] }
+      ]
+    });
+    if (!sub) {
+      res.status(404).json({ success: false, message: 'Subscription not found' });
+      return;
+    }
+    res.json({ success: true, data: sub });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+
 export const assignSubscription = async (req: Request, res: Response): Promise<void> => {
   try {
     const { villageId, planId, months } = req.body;

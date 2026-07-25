@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import {
   getPlans, createPlan, updatePlan, deletePlan,
-  getVillageSubscriptions, assignSubscription, updateSubscription,
+  getVillageSubscriptions, getVillageSubscription, assignSubscription, updateSubscription,
   getAllInvoices, approvePayment,
   getVillageInvoice, orderPlan, uploadPaymentProof,
   getSaasSettings, updateSaasSettings
@@ -35,6 +35,10 @@ router.post('/invoices/:id/approve', approvePayment);
 // ==========================================
 // RUTE PUBLIK / PENGGUNA (Untuk Warga / RT)
 // ==========================================
+
+// Get subscription untuk desa spesifik
+router.get('/village-subscription/:villageId', getVillageSubscription);
+router.get('/village/:villageId/subscription', getVillageSubscription);
 
 // Get invoice untuk desa spesifik
 router.get('/village/:villageId/invoices', getVillageInvoice);
