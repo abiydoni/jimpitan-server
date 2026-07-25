@@ -237,20 +237,36 @@ export const getVillageInvoice = async (req: Request, res: Response): Promise<vo
 
             const dueDate = addJakartaDays(new Date(), 7);
 
-            const newInvoice = await Invoice.create({
-              villageId,
-              baseAmount,
-              kkAmount,
-              totalAmount,
-              taxAmount,
-              taxPercentage,
-              kkCount,
-              status: 'UNPAID',
-              dueDate,
-              planName: plan.getDataValue('name'),
-              durationMonths: plan.getDataValue('durationMonths') || 1,
-              durationUnit: plan.getDataValue('durationUnit') || 'MONTHLY',
-            });
+            let newInvoice;
+            try {
+              newInvoice = await Invoice.create({
+                villageId,
+                baseAmount,
+                kkAmount,
+                totalAmount,
+                taxAmount,
+                taxPercentage,
+                kkCount,
+                status: 'UNPAID',
+                dueDate,
+                planName: plan.getDataValue('name'),
+                durationMonths: plan.getDataValue('durationMonths') || 1,
+                durationUnit: plan.getDataValue('durationUnit') || 'MONTHLY',
+              });
+            } catch (createErr: any) {
+              newInvoice = await Invoice.create({
+                villageId,
+                baseAmount,
+                kkAmount,
+                totalAmount,
+                kkCount,
+                status: 'UNPAID',
+                dueDate,
+                planName: plan.getDataValue('name'),
+                durationMonths: plan.getDataValue('durationMonths') || 1,
+                durationUnit: plan.getDataValue('durationUnit') || 'MONTHLY',
+              } as any);
+            }
 
             invoices = [newInvoice, ...invoices];
           }
@@ -295,20 +311,37 @@ export const orderPlan = async (req: Request, res: Response): Promise<void> => {
 
     const dueDate = addJakartaDays(new Date(), 3); // 3 days to pay in Asia/Jakarta
 
-    const invoice = await Invoice.create({
-      villageId,
-      baseAmount,
-      kkAmount,
-      totalAmount,
-      taxAmount,
-      taxPercentage,
-      kkCount,
-      status: 'UNPAID',
-      dueDate,
-      planName: plan.getDataValue('name'),
-      durationMonths: plan.getDataValue('durationMonths') || 1,
-      durationUnit: plan.getDataValue('durationUnit') || 'MONTHLY',
-    });
+    let invoice;
+    try {
+      invoice = await Invoice.create({
+        villageId,
+        baseAmount,
+        kkAmount,
+        totalAmount,
+        taxAmount,
+        taxPercentage,
+        kkCount,
+        status: 'UNPAID',
+        dueDate,
+        planName: plan.getDataValue('name'),
+        durationMonths: plan.getDataValue('durationMonths') || 1,
+        durationUnit: plan.getDataValue('durationUnit') || 'MONTHLY',
+      });
+    } catch (createErr: any) {
+      console.warn('Fallback Invoice.create without tax columns in orderPlan:', createErr.message);
+      invoice = await Invoice.create({
+        villageId,
+        baseAmount,
+        kkAmount,
+        totalAmount,
+        kkCount,
+        status: 'UNPAID',
+        dueDate,
+        planName: plan.getDataValue('name'),
+        durationMonths: plan.getDataValue('durationMonths') || 1,
+        durationUnit: plan.getDataValue('durationUnit') || 'MONTHLY',
+      } as any);
+    }
 
     res.json({ success: true, data: invoice });
   } catch (error: any) {
