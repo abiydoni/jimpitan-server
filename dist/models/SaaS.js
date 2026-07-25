@@ -49,6 +49,8 @@ Invoice.init({
     baseAmount: { type: sequelize_1.DataTypes.DECIMAL(10, 2), allowNull: false },
     kkAmount: { type: sequelize_1.DataTypes.DECIMAL(10, 2), allowNull: false },
     totalAmount: { type: sequelize_1.DataTypes.DECIMAL(10, 2), allowNull: false },
+    taxAmount: { type: sequelize_1.DataTypes.DECIMAL(10, 2), allowNull: true, defaultValue: 0 },
+    taxPercentage: { type: sequelize_1.DataTypes.DECIMAL(5, 2), allowNull: true, defaultValue: 10 },
     kkCount: { type: sequelize_1.DataTypes.INTEGER, allowNull: false },
     status: { type: sequelize_1.DataTypes.ENUM('UNPAID', 'PENDING_VERIFICATION', 'PAID', 'EXPIRED'), defaultValue: 'UNPAID' },
     dueDate: { type: sequelize_1.DataTypes.DATE, allowNull: false },

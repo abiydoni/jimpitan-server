@@ -10,7 +10,22 @@ const jakartaTime_1 = require("../utils/jakartaTime");
 const getPlans = async (req, res) => {
     try {
         const plans = await models_1.SubscriptionPlan.findAll();
-        res.json({ success: true, data: plans });
+        // Urutkan dari masa paket terendah (ascending)
+        plans.sort((a, b) => {
+            const getMonths = (p) => {
+                const m = Number(p.getDataValue('durationMonths')) || 1;
+                const u = String(p.getDataValue('durationUnit')).toUpperCase();
+                if (u.includes('YEAR') || u.includes('TAHUN'))
+                    return m * 12;
+                if (u.includes('WEEK') || u.includes('MINGGU'))
+                    return m * 0.25;
+                return m;
+            };
+            return getMonths(a) - getMonths(b);
+        });
+        const taxSetting = await models_1.SystemSetting.findOne({ where: { key: 'TAX_PERCENTAGE' } });
+        const taxPercentage = taxSetting ? parseFloat(taxSetting.getDataValue('value') || '10') : 10;
+        res.json({ success: true, data: plans, taxPercentage });
     }
     catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -20,7 +35,7 @@ exports.getPlans = getPlans;
 const createPlan = async (req, res) => {
     try {
         const { name, basePrice, pricePerKk, maxKk, features, durationMonths, durationUnit } = req.body;
-        const plan = await models_1.SubscriptionPlan.create({ name, basePrice, pricePerKk, maxKk, features, durationMonths: durationMonths || 1, durationUnit: durationUnit || 'MONTHLY' });
+        const plan = await models_1.SubscriptionPlan.create({ name, basePrice, pricePerKk: pricePerKk || 0, maxKk, features, durationMonths: durationMonths || 1, durationUnit: durationUnit || 'MONTHLY' });
         res.status(201).json({ success: true, data: plan });
     }
     catch (error) {
@@ -214,13 +229,19 @@ const getVillageInvoice = async (req, res) => {
                         }) || 0;
                         const baseAmount = basePrice;
                         const kkAmount = pricePerKk * kkCount;
-                        const totalAmount = baseAmount + kkAmount;
+                        const subtotal = baseAmount + kkAmount;
+                        const taxSetting = await models_1.SystemSetting.findOne({ where: { key: 'TAX_PERCENTAGE' } });
+                        const taxPercentage = taxSetting ? parseFloat(taxSetting.getDataValue('value') || '10') : 10;
+                        const taxAmount = (subtotal * taxPercentage) / 100;
+                        const totalAmount = subtotal + taxAmount;
                         const dueDate = (0, jakartaTime_1.addJakartaDays)(new Date(), 7);
                         const newInvoice = await models_1.Invoice.create({
                             villageId,
                             baseAmount,
                             kkAmount,
                             totalAmount,
+                            taxAmount,
+                            taxPercentage,
                             kkCount,
                             status: 'UNPAID',
                             dueDate,
@@ -262,13 +283,19 @@ const orderPlan = async (req, res) => {
         }) || 0;
         const baseAmount = plan.getDataValue('basePrice') || 0;
         const kkAmount = (plan.getDataValue('pricePerKk') || 0) * kkCount;
-        const totalAmount = parseFloat(baseAmount.toString()) + parseFloat(kkAmount.toString());
+        const subtotal = parseFloat(baseAmount.toString()) + parseFloat(kkAmount.toString());
+        const taxSetting = await models_1.SystemSetting.findOne({ where: { key: 'TAX_PERCENTAGE' } });
+        const taxPercentage = taxSetting ? parseFloat(taxSetting.getDataValue('value') || '10') : 10;
+        const taxAmount = (subtotal * taxPercentage) / 100;
+        const totalAmount = subtotal + taxAmount;
         const dueDate = (0, jakartaTime_1.addJakartaDays)(new Date(), 3); // 3 days to pay in Asia/Jakarta
         const invoice = await models_1.Invoice.create({
             villageId,
             baseAmount,
             kkAmount,
             totalAmount,
+            taxAmount,
+            taxPercentage,
             kkCount,
             status: 'UNPAID',
             dueDate,
@@ -315,16 +342,28 @@ const getSaasSettings = async (req, res) => {
 exports.getSaasSettings = getSaasSettings;
 const updateSaasSettings = async (req, res) => {
     try {
-        const { bankAccountInfo } = req.body; // e.g. "BCA 12345678 a/n Jimpitan"
-        // Upsert
-        const [setting, created] = await models_1.SystemSetting.findOrCreate({
-            where: { key: 'BANK_ACCOUNT_INFO' },
-            defaults: { value: bankAccountInfo }
-        });
-        if (!created) {
-            await setting.update({ value: bankAccountInfo });
+        const { bankAccountInfo, taxPercentage, TAX_PERCENTAGE } = req.body;
+        if (bankAccountInfo !== undefined) {
+            const [setting, created] = await models_1.SystemSetting.findOrCreate({
+                where: { key: 'BANK_ACCOUNT_INFO' },
+                defaults: { value: bankAccountInfo, description: 'Informasi Rekening Bank Pembayaran' }
+            });
+            if (!created) {
+                await setting.update({ value: bankAccountInfo });
+            }
         }
-        res.json({ success: true, data: setting });
+        const taxVal = taxPercentage !== undefined ? taxPercentage : TAX_PERCENTAGE;
+        if (taxVal !== undefined) {
+            const [setting, created] = await models_1.SystemSetting.findOrCreate({
+                where: { key: 'TAX_PERCENTAGE' },
+                defaults: { value: String(taxVal), description: 'Persentase Pajak (PPN) Tagihan' }
+            });
+            if (!created) {
+                await setting.update({ value: String(taxVal) });
+            }
+        }
+        const allSettings = await models_1.SystemSetting.findAll();
+        res.json({ success: true, data: allSettings });
     }
     catch (error) {
         res.status(500).json({ success: false, message: error.message });
