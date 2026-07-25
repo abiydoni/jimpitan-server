@@ -18,8 +18,8 @@ const getPlans = async (req, res) => {
 exports.getPlans = getPlans;
 const createPlan = async (req, res) => {
     try {
-        const { name, basePrice, pricePerKk, maxKk, features } = req.body;
-        const plan = await models_1.SubscriptionPlan.create({ name, basePrice, pricePerKk, maxKk, features });
+        const { name, basePrice, pricePerKk, maxKk, features, durationMonths, durationUnit } = req.body;
+        const plan = await models_1.SubscriptionPlan.create({ name, basePrice, pricePerKk, maxKk, features, durationMonths: durationMonths || 1, durationUnit: durationUnit || 'MONTHLY' });
         res.status(201).json({ success: true, data: plan });
     }
     catch (error) {
@@ -167,11 +167,12 @@ const approvePayment = async (req, res) => {
             return;
         }
         await invoice.update({ status: 'PAID' });
-        // Perpanjang langganan desa selama 1 bulan
+        // Perpanjang langganan desa sesuai durasi paket pada invoice
         const sub = await models_1.VillageSubscription.findOne({ where: { villageId: invoice.getDataValue('villageId') } });
         if (sub) {
+            const monthsToAdd = parseInt(invoice.getDataValue('durationMonths')) || 1;
             const newEndDate = new Date(sub.getDataValue('endDate'));
-            newEndDate.setMonth(newEndDate.getMonth() + 1);
+            newEndDate.setMonth(newEndDate.getMonth() + monthsToAdd);
             await sub.update({ status: 'ACTIVE', endDate: newEndDate });
         }
         res.json({ success: true, message: 'Payment approved, subscription extended.' });
@@ -225,7 +226,10 @@ const getVillageInvoice = async (req, res) => {
                             totalAmount,
                             kkCount,
                             status: 'UNPAID',
-                            dueDate
+                            dueDate,
+                            planName: plan.getDataValue('name'),
+                            durationMonths: plan.getDataValue('durationMonths') || 1,
+                            durationUnit: plan.getDataValue('durationUnit') || 'MONTHLY',
                         });
                         invoices = [newInvoice, ...invoices];
                     }
@@ -272,6 +276,9 @@ const orderPlan = async (req, res) => {
             kkCount,
             status: 'UNPAID',
             dueDate,
+            planName: plan.getDataValue('name'),
+            durationMonths: plan.getDataValue('durationMonths') || 1,
+            durationUnit: plan.getDataValue('durationUnit') || 'MONTHLY',
         });
         res.json({ success: true, data: invoice });
     }

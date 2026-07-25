@@ -16,8 +16,8 @@ export const getPlans = async (req: Request, res: Response): Promise<void> => {
 
 export const createPlan = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, basePrice, pricePerKk, maxKk, features } = req.body;
-    const plan = await SubscriptionPlan.create({ name, basePrice, pricePerKk, maxKk, features });
+    const { name, basePrice, pricePerKk, maxKk, features, durationMonths, durationUnit } = req.body;
+    const plan = await SubscriptionPlan.create({ name, basePrice, pricePerKk, maxKk, features, durationMonths: durationMonths || 1, durationUnit: durationUnit || 'MONTHLY' });
     res.status(201).json({ success: true, data: plan });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
@@ -157,11 +157,12 @@ export const approvePayment = async (req: Request, res: Response): Promise<void>
 
     await invoice.update({ status: 'PAID' });
 
-    // Perpanjang langganan desa selama 1 bulan
+    // Perpanjang langganan desa sesuai durasi paket pada invoice
     const sub = await VillageSubscription.findOne({ where: { villageId: invoice.getDataValue('villageId') } });
     if (sub) {
+      const monthsToAdd = parseInt(invoice.getDataValue('durationMonths') as any) || 1;
       const newEndDate = new Date(sub.getDataValue('endDate'));
-      newEndDate.setMonth(newEndDate.getMonth() + 1);
+      newEndDate.setMonth(newEndDate.getMonth() + monthsToAdd);
       await sub.update({ status: 'ACTIVE', endDate: newEndDate });
     }
 
@@ -221,7 +222,10 @@ export const getVillageInvoice = async (req: Request, res: Response): Promise<vo
               totalAmount,
               kkCount,
               status: 'UNPAID',
-              dueDate
+              dueDate,
+              planName: plan.getDataValue('name'),
+              durationMonths: plan.getDataValue('durationMonths') || 1,
+              durationUnit: plan.getDataValue('durationUnit') || 'MONTHLY',
             });
 
             invoices = [newInvoice, ...invoices];
@@ -268,6 +272,9 @@ export const orderPlan = async (req: Request, res: Response): Promise<void> => {
       kkCount,
       status: 'UNPAID',
       dueDate,
+      planName: plan.getDataValue('name'),
+      durationMonths: plan.getDataValue('durationMonths') || 1,
+      durationUnit: plan.getDataValue('durationUnit') || 'MONTHLY',
     });
 
     res.json({ success: true, data: invoice });

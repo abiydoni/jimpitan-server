@@ -12,6 +12,8 @@ SubscriptionPlan.init({
   pricePerKk: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
   maxKk: { type: DataTypes.INTEGER, allowNull: true },
   features: { type: DataTypes.JSON, allowNull: true },
+  durationMonths: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1 },
+  durationUnit: { type: DataTypes.STRING(50), allowNull: false, defaultValue: 'MONTHLY' },
 }, { sequelize, modelName: 'subscriptionPlan', tableName: 'subscription_plans', timestamps: true });
 
 // ---------------------------
@@ -35,6 +37,9 @@ export class Invoice extends Model {}
 Invoice.init({
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   villageId: { type: DataTypes.STRING(128), allowNull: false },
+  planName: { type: DataTypes.STRING(255), allowNull: true },
+  durationMonths: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 1 },
+  durationUnit: { type: DataTypes.STRING(50), allowNull: true, defaultValue: 'MONTHLY' },
   baseAmount: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
   kkAmount: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
   totalAmount: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
