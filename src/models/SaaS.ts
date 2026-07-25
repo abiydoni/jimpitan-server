@@ -43,6 +43,8 @@ Invoice.init({
   baseAmount: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
   kkAmount: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
   totalAmount: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
+  taxAmount: { type: DataTypes.DECIMAL(10, 2), allowNull: true, defaultValue: 0 },
+  taxPercentage: { type: DataTypes.DECIMAL(5, 2), allowNull: true, defaultValue: 10 },
   kkCount: { type: DataTypes.INTEGER, allowNull: false },
   status: { type: DataTypes.ENUM('UNPAID', 'PENDING_VERIFICATION', 'PAID', 'EXPIRED'), defaultValue: 'UNPAID' },
   dueDate: { type: DataTypes.DATE, allowNull: false },

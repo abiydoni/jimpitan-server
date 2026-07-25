@@ -29,6 +29,9 @@ export const connectDB = async () => {
       
       try { await sequelize.query("ALTER TABLE invoices ADD COLUMN paymentProof LONGTEXT NULL;"); } catch (e) {}
       try { await sequelize.query("ALTER TABLE invoices MODIFY COLUMN status ENUM('UNPAID', 'PENDING_VERIFICATION', 'PAID', 'EXPIRED') DEFAULT 'UNPAID';"); } catch (e) {}
+      try { await sequelize.query("ALTER TABLE invoices ADD COLUMN taxAmount DECIMAL(10,2) DEFAULT 0;"); } catch (e) {}
+      try { await sequelize.query("ALTER TABLE invoices ADD COLUMN taxPercentage DECIMAL(5,2) DEFAULT 10;"); } catch (e) {}
+      try { await sequelize.query("INSERT IGNORE INTO system_settings (`key`, `value`, `description`, `createdAt`, `updatedAt`) VALUES ('TAX_PERCENTAGE', '10', 'Persentase Pajak (PPN) Tagihan', NOW(), NOW());"); } catch (e) {}
 
       isConnected = true; // Berhenti dari loop jika sukses
     } catch (error: any) {
