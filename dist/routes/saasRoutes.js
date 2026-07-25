@@ -14,6 +14,7 @@ router.delete('/plans/:id', saasController_1.deletePlan);
 // Subscriptions
 router.get('/subscriptions', saasController_1.getVillageSubscriptions);
 router.post('/subscriptions/assign', saasController_1.assignSubscription);
+router.put('/subscriptions/:villageId', saasController_1.updateSubscription);
 // Invoices
 router.get('/invoices', saasController_1.getAllInvoices);
 router.post('/invoices/:id/approve', saasController_1.approvePayment);

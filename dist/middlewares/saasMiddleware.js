@@ -19,12 +19,14 @@ const checkSubscription = async (req, res, next) => {
         const sub = await models_1.VillageSubscription.findOne({ where: { villageId } });
         if (sub) {
             const status = sub.getDataValue('status');
-            if (status === 'SUSPENDED') {
+            const endDate = sub.getDataValue('endDate');
+            const isExpired = endDate && new Date(endDate) < new Date();
+            if (status === 'SUSPENDED' || isExpired) {
                 res.status(403).json({
                     success: false,
                     code: 'SUBSCRIPTION_SUSPENDED',
                     error: 'FORBIDDEN_SUSPENDED',
-                    message: 'Layanan ditangguhkan. Silakan hubungi Pengurus Desa untuk menyelesaikan pembayaran langganan SaaS.'
+                    message: 'Layanan ditangguhkan atau masa trial telah habis. Silakan hubungi Pengurus Desa untuk menyelesaikan pembayaran langganan SaaS.'
                 });
                 return;
             }

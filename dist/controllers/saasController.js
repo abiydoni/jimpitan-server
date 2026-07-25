@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getVillageInvoice = exports.approvePayment = exports.getAllInvoices = exports.assignSubscription = exports.getVillageSubscriptions = exports.deletePlan = exports.updatePlan = exports.createPlan = exports.getPlans = void 0;
+exports.getVillageInvoice = exports.approvePayment = exports.getAllInvoices = exports.updateSubscription = exports.assignSubscription = exports.getVillageSubscriptions = exports.deletePlan = exports.updatePlan = exports.createPlan = exports.getPlans = void 0;
 const models_1 = require("../models");
 // ==========================================
 // 1. Subscription Plan CRUD
@@ -79,16 +79,20 @@ exports.getVillageSubscriptions = getVillageSubscriptions;
 const assignSubscription = async (req, res) => {
     try {
         const { villageId, planId, months } = req.body;
-        // Hitung tanggal
-        const startDate = new Date();
-        const endDate = new Date();
-        endDate.setMonth(endDate.getMonth() + (months || 1));
-        // Cek apakah sudah punya langganan
         let sub = await models_1.VillageSubscription.findOne({ where: { villageId } });
         if (sub) {
-            await sub.update({ planId, status: 'ACTIVE', startDate, endDate });
+            const currentEndDate = sub.getDataValue('endDate');
+            const isStillActive = currentEndDate && new Date(currentEndDate) > new Date();
+            const startDate = isStillActive ? sub.getDataValue('startDate') : new Date();
+            const baseDate = isStillActive ? new Date(currentEndDate) : new Date();
+            const newEndDate = new Date(baseDate);
+            newEndDate.setMonth(newEndDate.getMonth() + (months || 1));
+            await sub.update({ planId, status: 'ACTIVE', startDate, endDate: newEndDate });
         }
         else {
+            const startDate = new Date();
+            const endDate = new Date();
+            endDate.setMonth(endDate.getMonth() + (months || 1));
             sub = await models_1.VillageSubscription.create({ villageId, planId, status: 'ACTIVE', startDate, endDate });
         }
         res.json({ success: true, data: sub });
@@ -98,6 +102,24 @@ const assignSubscription = async (req, res) => {
     }
 };
 exports.assignSubscription = assignSubscription;
+const updateSubscription = async (req, res) => {
+    try {
+        const { villageId } = req.params;
+        const { planId, status, endDate } = req.body;
+        let sub = await models_1.VillageSubscription.findOne({ where: { villageId } });
+        if (!sub) {
+            sub = await models_1.VillageSubscription.create({ villageId, planId, status, startDate: new Date(), endDate });
+        }
+        else {
+            await sub.update({ planId, status, endDate });
+        }
+        res.json({ success: true, data: sub });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+exports.updateSubscription = updateSubscription;
 // ==========================================
 // 3. Invoices Management
 // ==========================================

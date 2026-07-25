@@ -71,19 +71,42 @@ export const assignSubscription = async (req: Request, res: Response): Promise<v
   try {
     const { villageId, planId, months } = req.body;
     
-    // Hitung tanggal
-    const startDate = new Date();
-    const endDate = new Date();
-    endDate.setMonth(endDate.getMonth() + (months || 1));
-
-    // Cek apakah sudah punya langganan
     let sub = await VillageSubscription.findOne({ where: { villageId } });
     if (sub) {
-      await sub.update({ planId, status: 'ACTIVE', startDate, endDate });
+      const currentEndDate = sub.getDataValue('endDate');
+      const isStillActive = currentEndDate && new Date(currentEndDate) > new Date();
+      
+      const startDate = isStillActive ? sub.getDataValue('startDate') : new Date();
+      const baseDate = isStillActive ? new Date(currentEndDate) : new Date();
+      
+      const newEndDate = new Date(baseDate);
+      newEndDate.setMonth(newEndDate.getMonth() + (months || 1));
+
+      await sub.update({ planId, status: 'ACTIVE', startDate, endDate: newEndDate });
     } else {
+      const startDate = new Date();
+      const endDate = new Date();
+      endDate.setMonth(endDate.getMonth() + (months || 1));
       sub = await VillageSubscription.create({ villageId, planId, status: 'ACTIVE', startDate, endDate });
     }
     
+    res.json({ success: true, data: sub });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const updateSubscription = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { villageId } = req.params;
+    const { planId, status, endDate } = req.body;
+    
+    let sub = await VillageSubscription.findOne({ where: { villageId } });
+    if (!sub) { 
+        sub = await VillageSubscription.create({ villageId, planId, status, startDate: new Date(), endDate });
+    } else {
+        await sub.update({ planId, status, endDate });
+    }
     res.json({ success: true, data: sub });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });

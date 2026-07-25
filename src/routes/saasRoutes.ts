@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import {
   getPlans, createPlan, updatePlan, deletePlan,
-  getVillageSubscriptions, assignSubscription,
+  getVillageSubscriptions, assignSubscription, updateSubscription,
   getAllInvoices, approvePayment,
   getVillageInvoice
 } from '../controllers/saasController';
@@ -21,6 +21,7 @@ router.delete('/plans/:id', deletePlan);
 // Subscriptions
 router.get('/subscriptions', getVillageSubscriptions);
 router.post('/subscriptions/assign', assignSubscription);
+router.put('/subscriptions/:villageId', updateSubscription);
 
 // Invoices
 router.get('/invoices', getAllInvoices);

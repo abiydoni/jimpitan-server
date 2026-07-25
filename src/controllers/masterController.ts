@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { Village, User, Menu, Slide, Role, UserRole, Tariff, sequelize } from '../models';
+import { Village, User, Menu, Slide, Role, UserRole, Tariff, sequelize, SubscriptionPlan, VillageSubscription } from '../models';
 import { v4 as uuidv4 } from 'uuid';
 
 // Villages
@@ -15,7 +15,15 @@ export const getVillages = async (req: Request, res: Response): Promise<void> =>
 export const getVillageById = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const village = await Village.findByPk(id as string);
+    const village = await Village.findByPk(id as string, {
+      include: [
+        {
+          model: VillageSubscription,
+          as: 'subscriptions',
+          required: false
+        }
+      ]
+    });
     if (!village) {
       res.status(404).json({ success: false, message: 'Village not found' });
       return;
@@ -184,6 +192,25 @@ export const registerVillage = async (req: Request, res: Response): Promise<void
       villageId
     }, { transaction });
 
+    // 6. Setup 14-days Free Trial Subscription
+    let plan = await SubscriptionPlan.findOne({ where: { name: 'Free Trial' }, transaction });
+    if (!plan) {
+      plan = await SubscriptionPlan.create({
+        name: 'Free Trial',
+        basePrice: 0,
+        pricePerKk: 0,
+      }, { transaction });
+    }
+    
+    await VillageSubscription.create({
+      villageId,
+      planId: (plan as any).id,
+      status: 'ACTIVE',
+      startDate: new Date(),
+      endDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // + 14 days
+      autoRenew: false
+    }, { transaction });
+
     await transaction.commit();
     res.status(201).json({ success: true, message: 'Village registered successfully', data: { villageId, villageCode } });
   } catch (error: any) {
@@ -327,6 +354,13 @@ export const getUserById = async (req: Request, res: Response): Promise<void> =>
         {
           model: Village,
           attributes: ['id', 'name', 'config'],
+          include: [
+            {
+              model: VillageSubscription,
+              as: 'subscriptions',
+              required: false
+            }
+          ]
         }
       ]
     });

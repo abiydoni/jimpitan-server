@@ -212,6 +212,13 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
     }
 
     const updateData = pickProfileFields(req.body);
+    
+    // SECURITY PATCH: Mencegah eksploitasi status
+    // User hanya boleh set status ke PENDING/INCOMPLETE. Status ACTIVE hanya boleh diset oleh sistem/admin.
+    if (updateData.status && !['PENDING', 'INCOMPLETE'].includes(updateData.status as string)) {
+      delete updateData.status;
+    }
+
     if (Object.keys(updateData).length > 0) {
       await user.update(updateData);
     }
@@ -221,8 +228,15 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
       await user.save();
     }
 
-    if (roles && Array.isArray(roles) && villageId) {
-      await assignRoles(uid as string, roles, villageId);
+    // SECURITY PATCH: Mencegah eksploitasi role
+    // User tidak boleh set dirinya sendiri jadi admin.
+    let safeRoles = roles;
+    if (roles && Array.isArray(roles)) {
+      safeRoles = roles.filter(r => r === 'WARGA');
+    }
+
+    if (safeRoles && Array.isArray(safeRoles) && safeRoles.length > 0 && villageId) {
+      await assignRoles(uid as string, safeRoles, villageId);
     }
 
     const updatedUser = await User.findByPk(uid as string, {

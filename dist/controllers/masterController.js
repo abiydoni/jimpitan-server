@@ -17,7 +17,15 @@ exports.getVillages = getVillages;
 const getVillageById = async (req, res) => {
     try {
         const { id } = req.params;
-        const village = await models_1.Village.findByPk(id);
+        const village = await models_1.Village.findByPk(id, {
+            include: [
+                {
+                    model: models_1.VillageSubscription,
+                    as: 'subscriptions',
+                    required: false
+                }
+            ]
+        });
         if (!village) {
             res.status(404).json({ success: false, message: 'Village not found' });
             return;
@@ -175,6 +183,23 @@ const registerVillage = async (req, res) => {
             value: 'Lihat Detail',
             villageId
         }, { transaction });
+        // 6. Setup 14-days Free Trial Subscription
+        let plan = await models_1.SubscriptionPlan.findOne({ where: { name: 'Free Trial' }, transaction });
+        if (!plan) {
+            plan = await models_1.SubscriptionPlan.create({
+                name: 'Free Trial',
+                basePrice: 0,
+                pricePerKk: 0,
+            }, { transaction });
+        }
+        await models_1.VillageSubscription.create({
+            villageId,
+            planId: plan.id,
+            status: 'ACTIVE',
+            startDate: new Date(),
+            endDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // + 14 days
+            autoRenew: false
+        }, { transaction });
         await transaction.commit();
         res.status(201).json({ success: true, message: 'Village registered successfully', data: { villageId, villageCode } });
     }
@@ -317,6 +342,13 @@ const getUserById = async (req, res) => {
                 {
                     model: models_1.Village,
                     attributes: ['id', 'name', 'config'],
+                    include: [
+                        {
+                            model: models_1.VillageSubscription,
+                            as: 'subscriptions',
+                            required: false
+                        }
+                    ]
                 }
             ]
         });
