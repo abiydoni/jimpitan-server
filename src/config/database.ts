@@ -24,10 +24,12 @@ export const connectDB = async () => {
       addStartupLog('✅ Koneksi ke MySQL berhasil.');
 
       // Sinkronisasi model ke database (otomatis membuat tabel jika belum ada)
-      // Gunakan { alter: true } untuk menerapkan perubahan schema (seperti allowNull: true)
       await sequelize.sync({ alter: true });
       addStartupLog('✅ Semua model berhasil disinkronisasi ke database.');
       
+      try { await sequelize.query("ALTER TABLE invoices ADD COLUMN paymentProof LONGTEXT NULL;"); } catch (e) {}
+      try { await sequelize.query("ALTER TABLE invoices MODIFY COLUMN status ENUM('UNPAID', 'PENDING_VERIFICATION', 'PAID', 'EXPIRED') DEFAULT 'UNPAID';"); } catch (e) {}
+
       isConnected = true; // Berhenti dari loop jika sukses
     } catch (error: any) {
       console.error('❌ DB ERROR DETAIL:', error);
