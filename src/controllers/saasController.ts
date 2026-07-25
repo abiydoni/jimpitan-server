@@ -20,8 +20,13 @@ export const getPlans = async (req: Request, res: Response): Promise<void> => {
       };
       return getMonths(a) - getMonths(b);
     });
-    const taxSetting = await SystemSetting.findOne({ where: { key: 'TAX_PERCENTAGE' } });
-    const taxPercentage = taxSetting ? parseFloat(taxSetting.getDataValue('value') || '10') : 10;
+    let taxPercentage = 10;
+    try {
+      const taxSetting = await SystemSetting.findOne({ where: { key: 'TAX_PERCENTAGE' } });
+      if (taxSetting) taxPercentage = parseFloat(taxSetting.getDataValue('value') || '10');
+    } catch (err) {
+      console.error('Failed to fetch TAX_PERCENTAGE setting:', err);
+    }
     res.json({ success: true, data: plans, taxPercentage });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
@@ -222,8 +227,11 @@ export const getVillageInvoice = async (req: Request, res: Response): Promise<vo
             const kkAmount = pricePerKk * kkCount;
             const subtotal = baseAmount + kkAmount;
 
-            const taxSetting = await SystemSetting.findOne({ where: { key: 'TAX_PERCENTAGE' } });
-            const taxPercentage = taxSetting ? parseFloat(taxSetting.getDataValue('value') || '10') : 10;
+            let taxPercentage = 10;
+            try {
+              const taxSetting = await SystemSetting.findOne({ where: { key: 'TAX_PERCENTAGE' } });
+              if (taxSetting) taxPercentage = parseFloat(taxSetting.getDataValue('value') || '10');
+            } catch (err) {}
             const taxAmount = (subtotal * taxPercentage) / 100;
             const totalAmount = subtotal + taxAmount;
 
@@ -277,8 +285,11 @@ export const orderPlan = async (req: Request, res: Response): Promise<void> => {
     const kkAmount = (plan.getDataValue('pricePerKk') || 0) * kkCount;
     const subtotal = parseFloat(baseAmount.toString()) + parseFloat(kkAmount.toString());
 
-    const taxSetting = await SystemSetting.findOne({ where: { key: 'TAX_PERCENTAGE' } });
-    const taxPercentage = taxSetting ? parseFloat(taxSetting.getDataValue('value') || '10') : 10;
+    let taxPercentage = 10;
+    try {
+      const taxSetting = await SystemSetting.findOne({ where: { key: 'TAX_PERCENTAGE' } });
+      if (taxSetting) taxPercentage = parseFloat(taxSetting.getDataValue('value') || '10');
+    } catch (err) {}
     const taxAmount = (subtotal * taxPercentage) / 100;
     const totalAmount = subtotal + taxAmount;
 

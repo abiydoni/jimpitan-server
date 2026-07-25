@@ -23,8 +23,15 @@ const getPlans = async (req, res) => {
             };
             return getMonths(a) - getMonths(b);
         });
-        const taxSetting = await models_1.SystemSetting.findOne({ where: { key: 'TAX_PERCENTAGE' } });
-        const taxPercentage = taxSetting ? parseFloat(taxSetting.getDataValue('value') || '10') : 10;
+        let taxPercentage = 10;
+        try {
+            const taxSetting = await models_1.SystemSetting.findOne({ where: { key: 'TAX_PERCENTAGE' } });
+            if (taxSetting)
+                taxPercentage = parseFloat(taxSetting.getDataValue('value') || '10');
+        }
+        catch (err) {
+            console.error('Failed to fetch TAX_PERCENTAGE setting:', err);
+        }
         res.json({ success: true, data: plans, taxPercentage });
     }
     catch (error) {
@@ -230,8 +237,13 @@ const getVillageInvoice = async (req, res) => {
                         const baseAmount = basePrice;
                         const kkAmount = pricePerKk * kkCount;
                         const subtotal = baseAmount + kkAmount;
-                        const taxSetting = await models_1.SystemSetting.findOne({ where: { key: 'TAX_PERCENTAGE' } });
-                        const taxPercentage = taxSetting ? parseFloat(taxSetting.getDataValue('value') || '10') : 10;
+                        let taxPercentage = 10;
+                        try {
+                            const taxSetting = await models_1.SystemSetting.findOne({ where: { key: 'TAX_PERCENTAGE' } });
+                            if (taxSetting)
+                                taxPercentage = parseFloat(taxSetting.getDataValue('value') || '10');
+                        }
+                        catch (err) { }
                         const taxAmount = (subtotal * taxPercentage) / 100;
                         const totalAmount = subtotal + taxAmount;
                         const dueDate = (0, jakartaTime_1.addJakartaDays)(new Date(), 7);
@@ -284,8 +296,13 @@ const orderPlan = async (req, res) => {
         const baseAmount = plan.getDataValue('basePrice') || 0;
         const kkAmount = (plan.getDataValue('pricePerKk') || 0) * kkCount;
         const subtotal = parseFloat(baseAmount.toString()) + parseFloat(kkAmount.toString());
-        const taxSetting = await models_1.SystemSetting.findOne({ where: { key: 'TAX_PERCENTAGE' } });
-        const taxPercentage = taxSetting ? parseFloat(taxSetting.getDataValue('value') || '10') : 10;
+        let taxPercentage = 10;
+        try {
+            const taxSetting = await models_1.SystemSetting.findOne({ where: { key: 'TAX_PERCENTAGE' } });
+            if (taxSetting)
+                taxPercentage = parseFloat(taxSetting.getDataValue('value') || '10');
+        }
+        catch (err) { }
         const taxAmount = (subtotal * taxPercentage) / 100;
         const totalAmount = subtotal + taxAmount;
         const dueDate = (0, jakartaTime_1.addJakartaDays)(new Date(), 3); // 3 days to pay in Asia/Jakarta
