@@ -208,94 +208,10 @@ exports.approvePayment = approvePayment;
 const getVillageInvoice = async (req, res) => {
     try {
         const { villageId } = req.params;
-        let invoices = await models_1.Invoice.findAll({
+        const invoices = await models_1.Invoice.findAll({
             where: { villageId },
             order: [['createdAt', 'DESC']]
         });
-        const hasActiveInvoice = invoices.some(inv => {
-            const st = inv.getDataValue('status');
-            return st === 'UNPAID' || st === 'PENDING_VERIFICATION';
-        });
-        if (!hasActiveInvoice) {
-            const sub = await models_1.VillageSubscription.findOne({
-                where: { villageId },
-                include: [{ model: models_1.SubscriptionPlan, as: 'plan' }]
-            });
-            if (sub) {
-                const plan = sub.getDataValue('plan');
-                if (plan) {
-                    const basePrice = Number(plan.basePrice || 0);
-                    const pricePerKk = Number(plan.pricePerKk || 0);
-                    const planName = String(plan.name || '').toLowerCase();
-                    const isTrial = planName.includes('trial') || planName.includes('uji') || (basePrice === 0 && pricePerKk === 0);
-                    if (!isTrial) {
-                        const kkCount = await models_1.User.count({
-                            where: { villageId, familyId: { [sequelize_1.Op.ne]: null } },
-                            col: 'familyId',
-                            distinct: true
-                        }) || 0;
-                        const baseAmount = basePrice;
-                        const kkAmount = pricePerKk * kkCount;
-                        const subtotal = baseAmount + kkAmount;
-                        let taxPercentage = 10;
-                        try {
-                            const taxSetting = await models_1.SystemSetting.findOne({ where: { key: 'TAX_PERCENTAGE' } });
-                            if (taxSetting)
-                                taxPercentage = parseFloat(taxSetting.getDataValue('value') || '10');
-                        }
-                        catch (err) { }
-                        const taxAmount = (subtotal * taxPercentage) / 100;
-                        const totalAmount = subtotal + taxAmount;
-                        const dueDate = (0, jakartaTime_1.addJakartaDays)(new Date(), 7);
-                        let newInvoice;
-                        try {
-                            newInvoice = await models_1.Invoice.create({
-                                villageId,
-                                baseAmount,
-                                kkAmount,
-                                totalAmount,
-                                taxAmount,
-                                taxPercentage,
-                                kkCount,
-                                status: 'UNPAID',
-                                dueDate,
-                                planName: plan.getDataValue('name'),
-                                durationMonths: plan.getDataValue('durationMonths') || 1,
-                                durationUnit: plan.getDataValue('durationUnit') || 'MONTHLY',
-                            });
-                        }
-                        catch (createErr) {
-                            try {
-                                newInvoice = await models_1.Invoice.create({
-                                    villageId,
-                                    baseAmount,
-                                    kkAmount,
-                                    totalAmount,
-                                    kkCount,
-                                    status: 'UNPAID',
-                                    dueDate,
-                                    planName: plan.getDataValue('name'),
-                                    durationMonths: plan.getDataValue('durationMonths') || 1,
-                                    durationUnit: plan.getDataValue('durationUnit') || 'MONTHLY',
-                                });
-                            }
-                            catch (err2) {
-                                newInvoice = await models_1.Invoice.create({
-                                    villageId,
-                                    baseAmount,
-                                    kkAmount,
-                                    totalAmount,
-                                    kkCount,
-                                    status: 'UNPAID',
-                                    dueDate,
-                                });
-                            }
-                        }
-                        invoices = [newInvoice, ...invoices];
-                    }
-                }
-            }
-        }
         res.json({ success: true, data: invoices });
     }
     catch (error) {
@@ -337,30 +253,62 @@ const orderPlan = async (req, res) => {
         const totalAmount = subtotal + taxAmount;
         const dueDate = (0, jakartaTime_1.addJakartaDays)(new Date(), 3); // 3 days to pay in Asia/Jakarta
         let invoice;
-        try {
-            invoice = await models_1.Invoice.create({
-                villageId,
-                baseAmount,
-                kkAmount,
-                totalAmount,
-                taxAmount,
-                taxPercentage,
-                kkCount,
-                status: 'UNPAID',
-                dueDate,
-                planName: plan.getDataValue('name'),
-                durationMonths: plan.getDataValue('durationMonths') || 1,
-                durationUnit: plan.getDataValue('durationUnit') || 'MONTHLY',
-            });
+        const existingUnpaidInvoice = await models_1.Invoice.findOne({
+            where: { villageId, status: 'UNPAID' },
+            order: [['createdAt', 'DESC']]
+        });
+        if (existingUnpaidInvoice) {
+            try {
+                await existingUnpaidInvoice.update({
+                    baseAmount,
+                    kkAmount,
+                    totalAmount,
+                    taxAmount,
+                    taxPercentage,
+                    kkCount,
+                    dueDate,
+                    planName: plan.getDataValue('name'),
+                    durationMonths: plan.getDataValue('durationMonths') || 1,
+                    durationUnit: plan.getDataValue('durationUnit') || 'MONTHLY',
+                });
+                invoice = existingUnpaidInvoice;
+            }
+            catch (updateErr) {
+                console.warn('Fallback update existing invoice in orderPlan:', updateErr.message);
+                try {
+                    await existingUnpaidInvoice.update({
+                        baseAmount,
+                        kkAmount,
+                        totalAmount,
+                        kkCount,
+                        dueDate,
+                        planName: plan.getDataValue('name'),
+                        durationMonths: plan.getDataValue('durationMonths') || 1,
+                        durationUnit: plan.getDataValue('durationUnit') || 'MONTHLY',
+                    });
+                    invoice = existingUnpaidInvoice;
+                }
+                catch (err2) {
+                    await existingUnpaidInvoice.update({
+                        baseAmount,
+                        kkAmount,
+                        totalAmount,
+                        kkCount,
+                        dueDate,
+                    });
+                    invoice = existingUnpaidInvoice;
+                }
+            }
         }
-        catch (createErr) {
-            console.warn('Fallback Invoice.create 1 (without tax) in orderPlan:', createErr.message);
+        else {
             try {
                 invoice = await models_1.Invoice.create({
                     villageId,
                     baseAmount,
                     kkAmount,
                     totalAmount,
+                    taxAmount,
+                    taxPercentage,
                     kkCount,
                     status: 'UNPAID',
                     dueDate,
@@ -369,17 +317,34 @@ const orderPlan = async (req, res) => {
                     durationUnit: plan.getDataValue('durationUnit') || 'MONTHLY',
                 });
             }
-            catch (err2) {
-                console.warn('Fallback Invoice.create 2 (minimal day 1 columns) in orderPlan:', err2.message);
-                invoice = await models_1.Invoice.create({
-                    villageId,
-                    baseAmount,
-                    kkAmount,
-                    totalAmount,
-                    kkCount,
-                    status: 'UNPAID',
-                    dueDate,
-                });
+            catch (createErr) {
+                console.warn('Fallback Invoice.create 1 (without tax) in orderPlan:', createErr.message);
+                try {
+                    invoice = await models_1.Invoice.create({
+                        villageId,
+                        baseAmount,
+                        kkAmount,
+                        totalAmount,
+                        kkCount,
+                        status: 'UNPAID',
+                        dueDate,
+                        planName: plan.getDataValue('name'),
+                        durationMonths: plan.getDataValue('durationMonths') || 1,
+                        durationUnit: plan.getDataValue('durationUnit') || 'MONTHLY',
+                    });
+                }
+                catch (err2) {
+                    console.warn('Fallback Invoice.create 2 (minimal day 1 columns) in orderPlan:', err2.message);
+                    invoice = await models_1.Invoice.create({
+                        villageId,
+                        baseAmount,
+                        kkAmount,
+                        totalAmount,
+                        kkCount,
+                        status: 'UNPAID',
+                        dueDate,
+                    });
+                }
             }
         }
         res.json({ success: true, data: invoice });
