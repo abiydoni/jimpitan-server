@@ -17,6 +17,7 @@ router.get('/users', masterController_1.getUsers);
 router.get('/users/:uid', masterController_1.getUserById);
 router.put('/users/:uid', masterController_1.updateUserStatus);
 router.post('/users/family', masterController_1.saveUserFamily);
+router.post('/users/link-account', masterController_1.linkUserAccount);
 router.post('/users/bulk-import', masterController_1.bulkImportUsers);
 router.delete('/users/family/:familyId', masterController_1.deleteUserFamily);
 router.put('/users/:uid/fcm-token', masterController_1.updateFcmToken);

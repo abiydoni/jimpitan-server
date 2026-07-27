@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.bulkImportUsers = exports.updateOnlineStatus = exports.removeFcmToken = exports.updateFcmToken = exports.deleteSlide = exports.updateSlide = exports.createSlide = exports.getSlides = exports.deleteMenu = exports.updateMenu = exports.getMenus = exports.updateUserStatus = exports.getUserById = exports.saveUserFamily = exports.deleteUserFamily = exports.getUsers = exports.registerVillage = exports.deleteVillage = exports.updateVillage = exports.createVillage = exports.getVillageById = exports.getVillages = void 0;
+exports.bulkImportUsers = exports.updateOnlineStatus = exports.removeFcmToken = exports.updateFcmToken = exports.deleteSlide = exports.updateSlide = exports.createSlide = exports.getSlides = exports.deleteMenu = exports.updateMenu = exports.getMenus = exports.linkUserAccount = exports.updateUserStatus = exports.getUserById = exports.saveUserFamily = exports.deleteUserFamily = exports.getUsers = exports.registerVillage = exports.deleteVillage = exports.updateVillage = exports.createVillage = exports.getVillageById = exports.getVillages = void 0;
 const models_1 = require("../models");
 const uuid_1 = require("uuid");
 // Villages
@@ -85,10 +85,10 @@ const registerVillage = async (req, res) => {
     const transaction = await models_1.sequelize.transaction();
     try {
         const { uid, name, email, photoUrl, villageName, address, rtRw } = req.body;
-        // 1. Generate random 6 character code
-        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        // 1. Generate random 5 digit code (Hanya Angka)
+        const chars = '0123456789';
         let villageCode = '';
-        for (let i = 0; i < 6; i++) {
+        for (let i = 0; i < 5; i++) {
             villageCode += chars.charAt(Math.floor(Math.random() * chars.length));
         }
         // Ambil semua menu untuk membuat permission awal
@@ -377,6 +377,13 @@ const updateUserStatus = async (req, res) => {
             return;
         }
         await user.update({ status, villageId });
+        try {
+            const { firebaseService } = require('../services/firebaseService');
+            firebaseService.sendSyncNotification(villageId || user.getDataValue('villageId') || 'all', 'REFRESH_USERS');
+        }
+        catch (e) {
+            console.error('Failed to send sync notification:', e);
+        }
         res.json({ success: true, data: user });
     }
     catch (error) {
@@ -384,6 +391,104 @@ const updateUserStatus = async (req, res) => {
     }
 };
 exports.updateUserStatus = updateUserStatus;
+const linkUserAccount = async (req, res) => {
+    const transaction = await models_1.sequelize.transaction();
+    try {
+        const { pendingUid, targetUid, villageId } = req.body;
+        if (!pendingUid || !targetUid) {
+            res.status(400).json({ success: false, message: 'pendingUid dan targetUid wajib diisi' });
+            await transaction.rollback();
+            return;
+        }
+        if (pendingUid === targetUid) {
+            res.json({ success: true, message: 'Data sudah terkait' });
+            await transaction.rollback();
+            return;
+        }
+        const pendingUser = await models_1.User.findByPk(pendingUid, { transaction });
+        const targetUser = await models_1.User.findByPk(targetUid, { transaction });
+        if (!pendingUser || !targetUser) {
+            res.status(404).json({ success: false, message: 'User tidak ditemukan di database' });
+            await transaction.rollback();
+            return;
+        }
+        const email = pendingUser.getDataValue('email');
+        const photoUrl = pendingUser.getDataValue('photoUrl');
+        const name = targetUser.getDataValue('name') || pendingUser.getDataValue('name');
+        const nik = targetUser.getDataValue('nik');
+        const noKK = targetUser.getDataValue('noKK');
+        const familyId = targetUser.getDataValue('familyId') === targetUid ? pendingUid : targetUser.getDataValue('familyId');
+        const alamat = targetUser.getDataValue('alamat');
+        const tempatLahir = targetUser.getDataValue('tempatLahir');
+        const tanggalLahir = targetUser.getDataValue('tanggalLahir');
+        const jenisKelamin = targetUser.getDataValue('jenisKelamin');
+        const agama = targetUser.getDataValue('agama');
+        const pekerjaan = targetUser.getDataValue('pekerjaan');
+        const statusHubungan = targetUser.getDataValue('statusHubungan');
+        const statusPerkawinan = targetUser.getDataValue('statusPerkawinan');
+        const uniqueCode = targetUser.getDataValue('uniqueCode');
+        const phoneNumber = targetUser.getDataValue('phoneNumber') || pendingUser.getDataValue('phoneNumber');
+        const villageIdVal = villageId || targetUser.getDataValue('villageId') || pendingUser.getDataValue('villageId');
+        // Update Role
+        await models_1.Role.update({ userId: pendingUid }, { where: { userId: targetUid }, transaction });
+        // Update ChatMessage
+        try {
+            await models_1.ChatMessage.update({ senderUid: pendingUid }, { where: { senderUid: targetUid }, transaction });
+            await models_1.ChatMessage.update({ receiverUid: pendingUid }, { where: { receiverUid: targetUid }, transaction });
+        }
+        catch {
+            // Abaikan jika error
+        }
+        // Update User familyId references
+        await models_1.User.update({ familyId: pendingUid }, { where: { familyId: targetUid }, transaction });
+        // Update DuesJournal and JimpitanHistory references
+        try {
+            await models_1.DuesJournal.update({ kkId: pendingUid }, { where: { kkId: targetUid }, transaction });
+            await models_1.JimpitanHistory.update({ kkId: pendingUid }, { where: { kkId: targetUid }, transaction });
+        }
+        catch {
+            // Abaikan jika error
+        }
+        // Destroy targetUser (the offline dummy record)
+        await models_1.User.destroy({ where: { uid: targetUid }, transaction });
+        // Update pendingUser with all details and set status ACTIVE
+        await pendingUser.update({
+            name,
+            email,
+            photoUrl,
+            nik,
+            noKK,
+            familyId,
+            alamat,
+            tempatLahir,
+            tanggalLahir,
+            jenisKelamin,
+            agama,
+            pekerjaan,
+            statusHubungan,
+            statusPerkawinan,
+            uniqueCode,
+            phoneNumber,
+            villageId: villageIdVal,
+            status: 'ACTIVE'
+        }, { transaction });
+        await transaction.commit();
+        try {
+            const { firebaseService } = require('../services/firebaseService');
+            firebaseService.sendSyncNotification(villageIdVal || 'all', 'REFRESH_USERS');
+        }
+        catch (e) {
+            console.error('Failed to send sync notification:', e);
+        }
+        res.json({ success: true, message: 'Data pendaftar berhasil dikaitkan ke warga lama' });
+    }
+    catch (error) {
+        if (transaction)
+            await transaction.rollback();
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+exports.linkUserAccount = linkUserAccount;
 // Menus
 const getMenus = async (req, res) => {
     try {

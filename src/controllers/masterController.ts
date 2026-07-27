@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { Village, User, Menu, Slide, Role, UserRole, Tariff, sequelize, SubscriptionPlan, VillageSubscription } from '../models';
+import { Village, User, Menu, Slide, Role, UserRole, Tariff, sequelize, SubscriptionPlan, VillageSubscription, ChatMessage, DuesJournal, JimpitanHistory } from '../models';
 import { v4 as uuidv4 } from 'uuid';
 
 // Villages
@@ -81,10 +81,10 @@ export const registerVillage = async (req: Request, res: Response): Promise<void
   try {
     const { uid, name, email, photoUrl, villageName, address, rtRw } = req.body;
 
-    // 1. Generate random 6 character code
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    // 1. Generate random 5 digit code (Hanya Angka)
+    const chars = '0123456789';
     let villageCode = '';
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 5; i++) {
       villageCode += chars.charAt(Math.floor(Math.random() * chars.length));
     }
 
@@ -390,11 +390,124 @@ export const updateUserStatus = async (req: Request, res: Response): Promise<voi
     }
     
     await user.update({ status, villageId });
+    try {
+      const { firebaseService } = require('../services/firebaseService');
+      firebaseService.sendSyncNotification(villageId || user.getDataValue('villageId') || 'all', 'REFRESH_USERS');
+    } catch (e) {
+      console.error('Failed to send sync notification:', e);
+    }
     res.json({ success: true, data: user });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+export const linkUserAccount = async (req: Request, res: Response): Promise<void> => {
+  const transaction = await sequelize.transaction();
+  try {
+    const { pendingUid, targetUid, villageId } = req.body;
+    if (!pendingUid || !targetUid) {
+      res.status(400).json({ success: false, message: 'pendingUid dan targetUid wajib diisi' });
+      await transaction.rollback();
+      return;
+    }
+
+    if (pendingUid === targetUid) {
+      res.json({ success: true, message: 'Data sudah terkait' });
+      await transaction.rollback();
+      return;
+    }
+
+    const pendingUser = await User.findByPk(pendingUid, { transaction });
+    const targetUser = await User.findByPk(targetUid, { transaction });
+
+    if (!pendingUser || !targetUser) {
+      res.status(404).json({ success: false, message: 'User tidak ditemukan di database' });
+      await transaction.rollback();
+      return;
+    }
+
+    const email = pendingUser.getDataValue('email');
+    const photoUrl = pendingUser.getDataValue('photoUrl');
+    const name = targetUser.getDataValue('name') || pendingUser.getDataValue('name');
+    const nik = targetUser.getDataValue('nik');
+    const noKK = targetUser.getDataValue('noKK');
+    const familyId = targetUser.getDataValue('familyId') === targetUid ? pendingUid : targetUser.getDataValue('familyId');
+    const alamat = targetUser.getDataValue('alamat');
+    const tempatLahir = targetUser.getDataValue('tempatLahir');
+    const tanggalLahir = targetUser.getDataValue('tanggalLahir');
+    const jenisKelamin = targetUser.getDataValue('jenisKelamin');
+    const agama = targetUser.getDataValue('agama');
+    const pekerjaan = targetUser.getDataValue('pekerjaan');
+    const statusHubungan = targetUser.getDataValue('statusHubungan');
+    const statusPerkawinan = targetUser.getDataValue('statusPerkawinan');
+    const uniqueCode = targetUser.getDataValue('uniqueCode');
+    const phoneNumber = targetUser.getDataValue('phoneNumber') || pendingUser.getDataValue('phoneNumber');
+    const villageIdVal = villageId || targetUser.getDataValue('villageId') || pendingUser.getDataValue('villageId');
+
+    // Update Role
+    await Role.update({ userId: pendingUid }, { where: { userId: targetUid }, transaction });
+
+    // Update ChatMessage
+    try {
+      await ChatMessage.update({ senderUid: pendingUid }, { where: { senderUid: targetUid }, transaction });
+      await ChatMessage.update({ receiverUid: pendingUid }, { where: { receiverUid: targetUid }, transaction });
+    } catch {
+      // Abaikan jika error
+    }
+
+    // Update User familyId references
+    await User.update({ familyId: pendingUid }, { where: { familyId: targetUid }, transaction });
+
+    // Update DuesJournal and JimpitanHistory references
+    try {
+      await DuesJournal.update({ kkId: pendingUid }, { where: { kkId: targetUid }, transaction });
+      await JimpitanHistory.update({ kkId: pendingUid }, { where: { kkId: targetUid }, transaction });
+    } catch {
+      // Abaikan jika error
+    }
+
+    // Destroy targetUser (the offline dummy record)
+    await User.destroy({ where: { uid: targetUid }, transaction });
+
+    // Update pendingUser with all details and set status ACTIVE
+    await pendingUser.update({
+      name,
+      email,
+      photoUrl,
+      nik,
+      noKK,
+      familyId,
+      alamat,
+      tempatLahir,
+      tanggalLahir,
+      jenisKelamin,
+      agama,
+      pekerjaan,
+      statusHubungan,
+      statusPerkawinan,
+      uniqueCode,
+      phoneNumber,
+      villageId: villageIdVal,
+      status: 'ACTIVE'
+    }, { transaction });
+
+    await transaction.commit();
+
+    try {
+      const { firebaseService } = require('../services/firebaseService');
+      firebaseService.sendSyncNotification(villageIdVal || 'all', 'REFRESH_USERS');
+    } catch (e) {
+      console.error('Failed to send sync notification:', e);
+    }
+
+    res.json({ success: true, message: 'Data pendaftar berhasil dikaitkan ke warga lama' });
+  } catch (error: any) {
+    if (transaction) await transaction.rollback();
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 
 // Menus
 export const getMenus = async (req: Request, res: Response): Promise<void> => {

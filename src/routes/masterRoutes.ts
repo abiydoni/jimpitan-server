@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { 
   getVillages, getVillageById, createVillage, updateVillage, deleteVillage, registerVillage,
-  getUsers, getUserById, updateUserStatus, deleteUserFamily, saveUserFamily,
+  getUsers, getUserById, updateUserStatus, deleteUserFamily, saveUserFamily, linkUserAccount,
   updateFcmToken, removeFcmToken, updateOnlineStatus,
   getMenus, updateMenu, deleteMenu,
   getSlides, createSlide, updateSlide, deleteSlide,
@@ -25,6 +25,7 @@ router.get('/users', getUsers);
 router.get('/users/:uid', getUserById);
 router.put('/users/:uid', updateUserStatus);
 router.post('/users/family', saveUserFamily);
+router.post('/users/link-account', linkUserAccount);
 router.post('/users/bulk-import', bulkImportUsers);
 router.delete('/users/family/:familyId', deleteUserFamily);
 router.put('/users/:uid/fcm-token', updateFcmToken);
