@@ -34,9 +34,59 @@ export const getVillageById = async (req: Request, res: Response): Promise<void>
   }
 };
 
+const generateDefaultVillageConfig = async (existingConfig?: any) => {
+  const forbiddenForAdminDesa = ['villages', 'menu_master'];
+  const wargaMenus = ['scan', 'history', 'chat', 'home', 'profile', 'inventory', 'settings', 'help', 'about'];
+  
+  const standardMenuIds = [
+    'scan', 'history', 'report', 'chat', 'villages', 'menus', 'menu_master',
+    'home', 'profile', 'users', 'manage_roles', 'jadwal', 'tariffs', 'inventory',
+    'iuran', 'journals', 'slides', 'exemptions', 'settings', 'help', 'about',
+    'scan_manual', 'setor_jimpitan'
+  ];
+
+  const dbMenus = await Menu.findAll();
+  const allMenuIds = new Set<string>(standardMenuIds);
+  dbMenus.forEach((m: any) => {
+    if (m && m.id) allMenuIds.add(m.id);
+  });
+
+  const menuPermissions: any = existingConfig?.menuPermissions ? JSON.parse(JSON.stringify(existingConfig.menuPermissions)) : {};
+  
+  allMenuIds.forEach((menuId) => {
+    if (!menuPermissions[menuId]) {
+      menuPermissions[menuId] = {};
+    }
+    if (!menuPermissions[menuId]['SUPER_ADMIN']) {
+      menuPermissions[menuId]['SUPER_ADMIN'] = { view: true, create: true, edit: true, delete: true };
+    }
+    if (!menuPermissions[menuId]['ADMIN_DESA'] && !forbiddenForAdminDesa.includes(menuId)) {
+      menuPermissions[menuId]['ADMIN_DESA'] = { view: true, create: true, edit: true, delete: true };
+    }
+    if (!menuPermissions[menuId]['WARGA'] && wargaMenus.includes(menuId)) {
+      menuPermissions[menuId]['WARGA'] = { view: true, create: false, edit: false, delete: false };
+    }
+  });
+
+  return {
+    roles: existingConfig?.roles || ['ADMIN_DESA', 'WARGA'],
+    currency: existingConfig?.currency || 'IDR',
+    timezone: existingConfig?.timezone || 'Asia/Jakarta',
+    tariffPermissions: existingConfig?.tariffPermissions || {},
+    ...existingConfig,
+    menuPermissions
+  };
+};
+
 export const createVillage = async (req: Request, res: Response): Promise<void> => {
   try {
-    const village = await Village.create(req.body);
+    const id = req.body.id || `village_${uuidv4().substring(0, 8)}`;
+    const config = await generateDefaultVillageConfig(req.body.config);
+    const village = await Village.create({
+      ...req.body,
+      id,
+      config
+    });
     res.json({ success: true, data: village });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
@@ -88,27 +138,7 @@ export const registerVillage = async (req: Request, res: Response): Promise<void
       villageCode += chars.charAt(Math.floor(Math.random() * chars.length));
     }
 
-    // Ambil semua menu untuk membuat permission awal
-    // Kecualikan menu-menu sakral yang HANYA boleh diakses SUPER_ADMIN
-    const forbiddenForAdminDesa = ['villages', 'menu_master'];
-    const wargaMenus = ['scan', 'history', 'chat', 'home', 'profile', 'inventory', 'settings', 'help'];
-    const menus = await Menu.findAll();
-    const menuPermissions: any = {};
-    menus.forEach((m: any) => {
-      // SUPER_ADMIN selalu punya full access di semua menu
-      menuPermissions[m.id] = {
-        'SUPER_ADMIN': { view: true, create: true, edit: true, delete: true }
-      };
-      
-      if (!forbiddenForAdminDesa.includes(m.id)) {
-        menuPermissions[m.id]['ADMIN_DESA'] = { view: true, create: true, edit: true, delete: true };
-      }
-      
-      if (wargaMenus.includes(m.id)) {
-        menuPermissions[m.id]['WARGA'] = { view: true, create: false, edit: false, delete: false };
-      }
-    });
-
+    const config = await generateDefaultVillageConfig();
     const villageId = `village_${uuidv4().substring(0, 8)}`;
 
     // 2. Create new village document
@@ -117,12 +147,7 @@ export const registerVillage = async (req: Request, res: Response): Promise<void
       name: villageName,
       address: address + (rtRw ? ` - ${rtRw}` : ''),
       uniqueCode: villageCode,
-      config: {
-        roles: ['SUPER_ADMIN', 'ADMIN_DESA', 'WARGA'],
-        currency: 'IDR',
-        timezone: 'Asia/Jakarta',
-        menuPermissions
-      }
+      config
     }, { transaction });
 
     // 3. Setup user as ADMIN for the new village
