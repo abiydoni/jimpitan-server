@@ -187,6 +187,21 @@ export const approvePayment = async (req: Request, res: Response): Promise<void>
   }
 };
 
+export const rejectPayment = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const invoice = await Invoice.findByPk(id as string);
+    if (!invoice) { res.status(404).json({ success: false, message: 'Invoice not found' }); return; }
+
+    // Kembalikan status ke UNPAID agar bisa upload ulang bukti, dan kosongkan paymentProof
+    await invoice.update({ status: 'UNPAID', paymentProof: null });
+
+    res.json({ success: true, message: 'Payment rejected, status changed back to UNPAID.' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // ==========================================
 // 4. API Untuk Pengguna (Warga / RT)
 // ==========================================

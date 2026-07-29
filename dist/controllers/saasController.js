@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateSaasSettings = exports.getSaasSettings = exports.uploadPaymentProof = exports.orderPlan = exports.getVillageInvoice = exports.approvePayment = exports.getAllInvoices = exports.updateSubscription = exports.assignSubscription = exports.getVillageSubscription = exports.getVillageSubscriptions = exports.deletePlan = exports.updatePlan = exports.createPlan = exports.getPlans = void 0;
+exports.updateSaasSettings = exports.getSaasSettings = exports.uploadPaymentProof = exports.orderPlan = exports.getVillageInvoice = exports.rejectPayment = exports.approvePayment = exports.getAllInvoices = exports.updateSubscription = exports.assignSubscription = exports.getVillageSubscription = exports.getVillageSubscriptions = exports.deletePlan = exports.updatePlan = exports.createPlan = exports.getPlans = void 0;
 const models_1 = require("../models");
 const sequelize_1 = require("sequelize");
 const jakartaTime_1 = require("../utils/jakartaTime");
@@ -202,6 +202,23 @@ const approvePayment = async (req, res) => {
     }
 };
 exports.approvePayment = approvePayment;
+const rejectPayment = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const invoice = await models_1.Invoice.findByPk(id);
+        if (!invoice) {
+            res.status(404).json({ success: false, message: 'Invoice not found' });
+            return;
+        }
+        // Kembalikan status ke UNPAID agar bisa upload ulang bukti, dan kosongkan paymentProof
+        await invoice.update({ status: 'UNPAID', paymentProof: null });
+        res.json({ success: true, message: 'Payment rejected, status changed back to UNPAID.' });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+exports.rejectPayment = rejectPayment;
 // ==========================================
 // 4. API Untuk Pengguna (Warga / RT)
 // ==========================================

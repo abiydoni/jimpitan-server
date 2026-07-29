@@ -21,6 +21,7 @@ router.put('/subscriptions/:villageId', saasController_1.updateSubscription);
 // Invoices
 router.get('/invoices', saasController_1.getAllInvoices);
 router.post('/invoices/:id/approve', saasController_1.approvePayment);
+router.post('/invoices/:id/reject', saasController_1.rejectPayment);
 // ==========================================
 // RUTE PUBLIK / PENGGUNA (Untuk Warga / RT)
 // ==========================================
