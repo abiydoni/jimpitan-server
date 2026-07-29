@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateSaasSettings = exports.getSaasSettings = exports.uploadPaymentProof = exports.orderPlan = exports.getVillageInvoice = exports.rejectPayment = exports.approvePayment = exports.getAllInvoices = exports.updateSubscription = exports.assignSubscription = exports.getVillageSubscription = exports.getVillageSubscriptions = exports.deletePlan = exports.updatePlan = exports.createPlan = exports.getPlans = void 0;
+exports.updateSaasSettings = exports.getSaasSettings = exports.uploadPaymentProof = exports.orderPlan = exports.getVillageInvoice = exports.deleteInvoice = exports.rejectPayment = exports.approvePayment = exports.getAllInvoices = exports.updateSubscription = exports.assignSubscription = exports.getVillageSubscription = exports.getVillageSubscriptions = exports.deletePlan = exports.updatePlan = exports.createPlan = exports.getPlans = void 0;
 const models_1 = require("../models");
 const sequelize_1 = require("sequelize");
 const jakartaTime_1 = require("../utils/jakartaTime");
@@ -219,6 +219,22 @@ const rejectPayment = async (req, res) => {
     }
 };
 exports.rejectPayment = rejectPayment;
+const deleteInvoice = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const invoice = await models_1.Invoice.findByPk(id);
+        if (!invoice) {
+            res.status(404).json({ success: false, message: 'Invoice not found' });
+            return;
+        }
+        await invoice.destroy();
+        res.json({ success: true, message: 'Invoice deleted successfully.' });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+exports.deleteInvoice = deleteInvoice;
 // ==========================================
 // 4. API Untuk Pengguna (Warga / RT)
 // ==========================================

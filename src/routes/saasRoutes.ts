@@ -2,7 +2,7 @@ import { Router } from 'express';
 import {
   getPlans, createPlan, updatePlan, deletePlan,
   getVillageSubscriptions, getVillageSubscription, assignSubscription, updateSubscription,
-  getAllInvoices, approvePayment, rejectPayment,
+  getAllInvoices, approvePayment, rejectPayment, deleteInvoice,
   getVillageInvoice, orderPlan, uploadPaymentProof,
   getSaasSettings, updateSaasSettings
 } from '../controllers/saasController';
@@ -32,6 +32,7 @@ router.put('/subscriptions/:villageId', updateSubscription);
 router.get('/invoices', getAllInvoices);
 router.post('/invoices/:id/approve', approvePayment);
 router.post('/invoices/:id/reject', rejectPayment);
+router.delete('/invoices/:id', deleteInvoice);
 
 // ==========================================
 // RUTE PUBLIK / PENGGUNA (Untuk Warga / RT)

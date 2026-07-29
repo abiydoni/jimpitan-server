@@ -202,6 +202,19 @@ export const rejectPayment = async (req: Request, res: Response): Promise<void> 
   }
 };
 
+export const deleteInvoice = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const invoice = await Invoice.findByPk(id as string);
+    if (!invoice) { res.status(404).json({ success: false, message: 'Invoice not found' }); return; }
+
+    await invoice.destroy();
+    res.json({ success: true, message: 'Invoice deleted successfully.' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // ==========================================
 // 4. API Untuk Pengguna (Warga / RT)
 // ==========================================
