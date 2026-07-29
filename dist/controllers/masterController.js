@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.bulkImportUsers = exports.updateOnlineStatus = exports.removeFcmToken = exports.updateFcmToken = exports.deleteSlide = exports.updateSlide = exports.createSlide = exports.getSlides = exports.deleteMenu = exports.updateMenu = exports.getMenus = exports.linkUserAccount = exports.updateUserStatus = exports.getUserById = exports.saveUserFamily = exports.deleteUserFamily = exports.getUsers = exports.registerVillage = exports.deleteVillage = exports.updateVillage = exports.createVillage = exports.getVillageById = exports.getVillages = void 0;
+exports.bulkImportUsers = exports.updateOnlineStatus = exports.removeFcmToken = exports.updateFcmToken = exports.deleteSlide = exports.updateSlide = exports.createSlide = exports.getSlides = exports.deleteMenu = exports.updateMenu = exports.getMenus = exports.linkUserAccount = exports.updateUserRoles = exports.updateUserStatus = exports.getUserById = exports.saveUserFamily = exports.deleteUserFamily = exports.getUsers = exports.registerVillage = exports.deleteVillage = exports.updateVillage = exports.createVillage = exports.getVillageById = exports.getVillages = void 0;
 const models_1 = require("../models");
 const uuid_1 = require("uuid");
 // Villages
@@ -414,6 +414,51 @@ const updateUserStatus = async (req, res) => {
     }
 };
 exports.updateUserStatus = updateUserStatus;
+const updateUserRoles = async (req, res) => {
+    const transaction = await models_1.sequelize.transaction();
+    try {
+        const { uid } = req.params;
+        const { roles, villageId } = req.body;
+        if (!roles || !Array.isArray(roles)) {
+            res.status(400).json({ success: false, message: 'Roles harus berupa array string' });
+            await transaction.rollback();
+            return;
+        }
+        const user = await models_1.User.findByPk(uid, { transaction });
+        if (!user) {
+            res.status(404).json({ success: false, message: 'User not found' });
+            await transaction.rollback();
+            return;
+        }
+        // Hapus role lama untuk user ini
+        await models_1.Role.destroy({ where: { userId: uid }, transaction });
+        // Insert role baru
+        const uniqueRoles = roles.filter((val, idx, arr) => arr.indexOf(val) === idx);
+        for (let index = 0; index < uniqueRoles.length; index++) {
+            const roleName = uniqueRoles[index];
+            await models_1.Role.create({
+                id: `ur_${uid}_${roleName}_${Date.now()}_${index}`,
+                name: roleName,
+                userId: uid,
+                villageId: villageId || user.getDataValue('villageId')
+            }, { transaction });
+        }
+        await transaction.commit();
+        try {
+            const { firebaseService } = require('../services/firebaseService');
+            firebaseService.sendSyncNotification(villageId || user.getDataValue('villageId') || 'all', 'REFRESH_USERS');
+        }
+        catch (e) {
+            console.error('Failed to send sync notification:', e);
+        }
+        res.json({ success: true, message: 'Roles updated successfully' });
+    }
+    catch (error) {
+        await transaction.rollback();
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+exports.updateUserRoles = updateUserRoles;
 const linkUserAccount = async (req, res) => {
     const transaction = await models_1.sequelize.transaction();
     try {

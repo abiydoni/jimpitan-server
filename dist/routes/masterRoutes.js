@@ -23,6 +23,7 @@ router.delete('/users/family/:familyId', masterController_1.deleteUserFamily);
 router.put('/users/:uid/fcm-token', masterController_1.updateFcmToken);
 router.delete('/users/:uid/fcm-token', masterController_1.removeFcmToken);
 router.put('/users/:uid/online-status', masterController_1.updateOnlineStatus);
+router.put('/users/:uid/roles', masterController_1.updateUserRoles);
 // Menus
 router.get('/menus', masterController_1.getMenus);
 router.put('/menus/:id', masterController_1.updateMenu);

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { 
   getVillages, getVillageById, createVillage, updateVillage, deleteVillage, registerVillage,
   getUsers, getUserById, updateUserStatus, deleteUserFamily, saveUserFamily, linkUserAccount,
-  updateFcmToken, removeFcmToken, updateOnlineStatus,
+  updateFcmToken, removeFcmToken, updateOnlineStatus, updateUserRoles,
   getMenus, updateMenu, deleteMenu,
   getSlides, createSlide, updateSlide, deleteSlide,
   bulkImportUsers
@@ -31,6 +31,7 @@ router.delete('/users/family/:familyId', deleteUserFamily);
 router.put('/users/:uid/fcm-token', updateFcmToken);
 router.delete('/users/:uid/fcm-token', removeFcmToken);
 router.put('/users/:uid/online-status', updateOnlineStatus);
+router.put('/users/:uid/roles', updateUserRoles);
 
 // Menus
 router.get('/menus', getMenus);

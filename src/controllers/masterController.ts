@@ -426,6 +426,55 @@ export const updateUserStatus = async (req: Request, res: Response): Promise<voi
     res.status(500).json({ success: false, message: error.message });
   }
 };
+export const updateUserRoles = async (req: Request, res: Response): Promise<void> => {
+  const transaction = await sequelize.transaction();
+  try {
+    const { uid } = req.params;
+    const { roles, villageId } = req.body;
+    
+    if (!roles || !Array.isArray(roles)) {
+      res.status(400).json({ success: false, message: 'Roles harus berupa array string' });
+      await transaction.rollback();
+      return;
+    }
+
+    const user = await User.findByPk(uid as string, { transaction });
+    if (!user) {
+      res.status(404).json({ success: false, message: 'User not found' });
+      await transaction.rollback();
+      return;
+    }
+
+    // Hapus role lama untuk user ini
+    await Role.destroy({ where: { userId: uid }, transaction });
+
+    // Insert role baru
+    const uniqueRoles = roles.filter((val: any, idx: number, arr: any[]) => arr.indexOf(val) === idx) as string[];
+    for (let index = 0; index < uniqueRoles.length; index++) {
+      const roleName = uniqueRoles[index];
+      await Role.create({
+        id: `ur_${uid}_${roleName}_${Date.now()}_${index}`,
+        name: roleName,
+        userId: uid,
+        villageId: villageId || user.getDataValue('villageId')
+      }, { transaction });
+    }
+
+    await transaction.commit();
+    
+    try {
+      const { firebaseService } = require('../services/firebaseService');
+      firebaseService.sendSyncNotification(villageId || user.getDataValue('villageId') || 'all', 'REFRESH_USERS');
+    } catch (e) {
+      console.error('Failed to send sync notification:', e);
+    }
+    
+    res.json({ success: true, message: 'Roles updated successfully' });
+  } catch (error: any) {
+    await transaction.rollback();
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 
 export const linkUserAccount = async (req: Request, res: Response): Promise<void> => {
   const transaction = await sequelize.transaction();
