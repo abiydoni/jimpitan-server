@@ -179,6 +179,34 @@ const getSuperAdminSummary = async (req, res) => {
             limit: 10,
             attributes: ['id', 'villageId', 'amount', 'type', 'journalType', 'description', 'createdAt']
         });
+        // 5. Data Chart (Jimpitan 7 Hari Terakhir)
+        const chartData = [];
+        const sevenDaysAgo = new Date(now);
+        sevenDaysAgo.setDate(now.getDate() - 6);
+        const jimpitanData = await models_1.JimpitanHistory.findAll({
+            where: {
+                date: {
+                    [sequelize_1.Op.between]: [sevenDaysAgo.toISOString().split('T')[0], now.toISOString().split('T')[0]]
+                }
+            },
+            attributes: ['date', 'amountCollected']
+        });
+        const dailyMap = {};
+        jimpitanData.forEach(j => {
+            const d = j.dataValues.date;
+            dailyMap[d] = (dailyMap[d] || 0) + Number(j.dataValues.amountCollected || 0);
+        });
+        for (let i = 0; i <= 6; i++) {
+            const d = new Date(sevenDaysAgo);
+            d.setDate(sevenDaysAgo.getDate() + i);
+            const dateStr = d.toISOString().split('T')[0];
+            const dayLabel = d.toLocaleDateString('id-ID', { weekday: 'short' });
+            const shortDate = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+            chartData.push({
+                label: `${dayLabel}, ${shortDate}`,
+                value: dailyMap[dateStr] || 0
+            });
+        }
         res.json({
             success: true,
             data: {
@@ -186,7 +214,8 @@ const getSuperAdminSummary = async (req, res) => {
                 totalUsers,
                 totalJimpitan: totalJimpitanGlobal || 0,
                 pendingReports: recentActivitiesCount,
-                recentActivities
+                recentActivities,
+                chartData
             }
         });
     }
