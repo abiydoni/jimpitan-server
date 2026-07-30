@@ -517,6 +517,8 @@ const linkUserAccount = async (req, res) => {
         catch {
             // Abaikan jika error
         }
+        // Pertahankan createdAt dari targetUser (warga lama) agar tanggal efektif tidak berubah
+        const targetCreatedAt = targetUser.getDataValue('createdAt');
         // Destroy targetUser (the offline dummy record)
         await models_1.User.destroy({ where: { uid: targetUid }, transaction });
         // Update pendingUser with all details and set status ACTIVE
@@ -540,6 +542,11 @@ const linkUserAccount = async (req, res) => {
             villageId: villageIdVal,
             status: 'ACTIVE'
         }, { transaction });
+        if (targetCreatedAt) {
+            pendingUser.setDataValue('createdAt', targetCreatedAt);
+            pendingUser.changed('createdAt', true);
+            await pendingUser.save({ transaction });
+        }
         await transaction.commit();
         try {
             const { firebaseService } = require('../services/firebaseService');

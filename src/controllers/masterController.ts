@@ -541,6 +541,9 @@ export const linkUserAccount = async (req: Request, res: Response): Promise<void
       // Abaikan jika error
     }
 
+    // Pertahankan createdAt dari targetUser (warga lama) agar tanggal efektif tidak berubah
+    const targetCreatedAt = targetUser.getDataValue('createdAt');
+
     // Destroy targetUser (the offline dummy record)
     await User.destroy({ where: { uid: targetUid }, transaction });
 
@@ -565,6 +568,12 @@ export const linkUserAccount = async (req: Request, res: Response): Promise<void
       villageId: villageIdVal,
       status: 'ACTIVE'
     }, { transaction });
+
+    if (targetCreatedAt) {
+      (pendingUser as any).setDataValue('createdAt', targetCreatedAt);
+      (pendingUser as any).changed('createdAt', true);
+      await pendingUser.save({ transaction });
+    }
 
     await transaction.commit();
 
