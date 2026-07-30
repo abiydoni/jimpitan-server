@@ -15,6 +15,7 @@ import roleRoutes from './routes/roleRoutes';
 import superadminRoutes from './routes/superadminRoutes';
 import saasRoutes from './routes/saasRoutes';
 import monitorRoutes from './routes/monitorRoutes';
+import configRoutes from './routes/configRoutes';
 import path from 'path';
 import { initSaasCronJobs } from './cron/saasJobs';
 import { addStartupLog } from './utils/startupLogs';
@@ -58,6 +59,7 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/master', masterRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/superadmin', superadminRoutes);
+app.use('/api/config', configRoutes);
 app.use('/api/saas', saasRoutes);
 app.use('/api/server', monitorRoutes);
 
