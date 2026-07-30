@@ -38,6 +38,10 @@ app.use(express_1.default.urlencoded({ limit: '50mb', extended: true }));
 app.get('/', (req, res) => {
     res.sendFile(path_1.default.join(__dirname, '../src/views/monitor.html'));
 });
+// Endpoint untuk melayani Halaman Kebijakan Privasi (Syarat mutlak Google Play)
+app.get('/privacy', (req, res) => {
+    res.sendFile(path_1.default.join(__dirname, '../src/views/privacy.html'));
+});
 // ==========================================
 // REQUEST LOGGER
 // ==========================================

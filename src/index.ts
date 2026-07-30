@@ -39,6 +39,11 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../src/views/monitor.html'));
 });
 
+// Endpoint untuk melayani Halaman Kebijakan Privasi (Syarat mutlak Google Play)
+app.get('/privacy', (req, res) => {
+  res.sendFile(path.join(__dirname, '../src/views/privacy.html'));
+});
+
 // ==========================================
 // REQUEST LOGGER
 // ==========================================
