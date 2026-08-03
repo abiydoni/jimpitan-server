@@ -1,28 +1,73 @@
 import { Request, Response } from 'express';
-
-/**
- * Konfigurasi versi aplikasi.
- *
- * Ketika rilis versi baru ke Play Store:
- *  1. Update `latestVersion` ke versi terbaru
- *  2. Jika ingin paksa update, naikkan `minVersion` dan set `forceUpdate: true`
- *  3. Deploy ulang server — semua user akan langsung mendapat notifikasi
- */
-const APP_VERSION_CONFIG = {
-  latestVersion: '1.9.3',   // Versi terbaru di Play Store
-  minVersion: '1.0.0',       // Versi minimum yang masih boleh dipakai
-  forceUpdate: false,         // true = user WAJIB update, tidak bisa skip
-  updateUrl: 'https://play.google.com/store/apps/details?id=jimpitan.appsbee.my.id',
-  releaseNotes: 'Perbaikan bug dan peningkatan performa.',
-};
+import { SystemSetting } from '../models';
 
 /**
  * GET /api/config/version
  * Endpoint publik — tidak perlu auth, dipanggil saat app dibuka.
  */
-export const getAppVersion = (req: Request, res: Response) => {
-  res.json({
-    success: true,
-    data: APP_VERSION_CONFIG,
-  });
+export const getAppVersion = async (req: Request, res: Response) => {
+  try {
+    const keys = ['latestVersion', 'minVersion', 'forceUpdate', 'updateUrl', 'releaseNotes'];
+    const settings = await SystemSetting.findAll({ where: { key: keys } });
+    
+    // Convert array to object
+    const config: any = {};
+    settings.forEach((s: any) => {
+      config[s.key] = s.value;
+    });
+
+    // Default values if missing
+    const data = {
+      latestVersion: config.latestVersion || '1.9.4',
+      minVersion: config.minVersion || '1.0.0',
+      forceUpdate: config.forceUpdate === 'true' || config.forceUpdate === '1',
+      updateUrl: config.updateUrl || 'https://play.google.com/store/apps/details?id=com.appsbeem.jimpitan',
+      releaseNotes: config.releaseNotes || 'Perbaikan bug dan peningkatan performa.',
+    };
+
+    res.json({
+      success: true,
+      data: data,
+    });
+  } catch (error) {
+    console.error('Error fetching version config:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+/**
+ * PUT /api/config/version
+ * Endpoint untuk admin mengupdate versi aplikasi
+ */
+export const updateAppVersion = async (req: Request, res: Response) => {
+  try {
+    const { latestVersion, minVersion, forceUpdate, updateUrl, releaseNotes } = req.body;
+    
+    const updates = [
+      { key: 'latestVersion', value: latestVersion },
+      { key: 'minVersion', value: minVersion },
+      { key: 'forceUpdate', value: forceUpdate ? 'true' : 'false' },
+      { key: 'updateUrl', value: updateUrl },
+      { key: 'releaseNotes', value: releaseNotes },
+    ];
+
+    for (const item of updates) {
+      if (item.value !== undefined) {
+        // Upsert setting
+        const [setting, created] = await SystemSetting.findOrCreate({
+          where: { key: item.key },
+          defaults: { value: String(item.value) }
+        });
+        
+        if (!created) {
+          await (setting as any).update({ value: String(item.value) });
+        }
+      }
+    }
+
+    res.json({ success: true, message: 'Konfigurasi versi berhasil diperbarui' });
+  } catch (error) {
+    console.error('Error updating version config:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
 };
