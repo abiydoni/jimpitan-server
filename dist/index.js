@@ -39,7 +39,14 @@ app.get('/', (req, res) => {
     res.sendFile(path_1.default.join(__dirname, '../src/views/monitor.html'));
 });
 // Melayani file statis dari folder uploads (untuk APK, dll)
-app.use('/uploads', express_1.default.static(path_1.default.join(__dirname, '../uploads')));
+app.use('/uploads', express_1.default.static(path_1.default.join(__dirname, '../uploads'), {
+    setHeaders: (res, filePath) => {
+        // Paksa browser/Android untuk mengunduh file APK, bukan mencoba membukanya di tab baru
+        if (filePath.endsWith('.apk')) {
+            res.setHeader('Content-Disposition', 'attachment');
+        }
+    }
+}));
 // Endpoint untuk melayani Halaman Kebijakan Privasi (Syarat mutlak Google Play)
 app.get('/privacy', (req, res) => {
     res.sendFile(path_1.default.join(__dirname, '../src/views/privacy.html'));
