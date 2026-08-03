@@ -38,6 +38,8 @@ app.use(express_1.default.urlencoded({ limit: '50mb', extended: true }));
 app.get('/', (req, res) => {
     res.sendFile(path_1.default.join(__dirname, '../src/views/monitor.html'));
 });
+// Melayani file statis dari folder uploads (untuk APK, dll)
+app.use('/uploads', express_1.default.static(path_1.default.join(__dirname, '../uploads')));
 // Endpoint untuk melayani Halaman Kebijakan Privasi (Syarat mutlak Google Play)
 app.get('/privacy', (req, res) => {
     res.sendFile(path_1.default.join(__dirname, '../src/views/privacy.html'));
