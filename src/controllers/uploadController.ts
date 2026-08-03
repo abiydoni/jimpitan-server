@@ -51,6 +51,29 @@ export const uploadApk = (req: Request, res: Response) => {
     // Hasil URL: http://localhost:3000/uploads/apks/nama-file.apk
     const fileUrl = `${protocol}://${host}/uploads/apks/${req.file.filename}`;
 
+    // Bersihkan file APK lama (Maksimal 5 file)
+    try {
+      const files = fs.readdirSync(uploadDir);
+      const apkFiles = files
+        .filter(f => f.endsWith('.apk'))
+        .map(f => {
+          const filePath = path.join(uploadDir, f);
+          const stat = fs.statSync(filePath);
+          return { name: f, path: filePath, time: stat.mtime.getTime() };
+        })
+        .sort((a, b) => b.time - a.time); // Urutkan dari yang terbaru (descending)
+
+      // Jika lebih dari 5, hapus sisanya (yang paling lama)
+      if (apkFiles.length > 5) {
+        const filesToDelete = apkFiles.slice(5);
+        for (const fileToDelete of filesToDelete) {
+          fs.unlinkSync(fileToDelete.path);
+        }
+      }
+    } catch (cleanupError) {
+      console.error('Gagal membersihkan file APK lama:', cleanupError);
+    }
+
     return res.status(200).json({
       success: true,
       message: 'File APK berhasil diunggah',
