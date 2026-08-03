@@ -47,11 +47,12 @@ const uploadApk = (req, res) => {
         }
         // Bangun URL statis berdasarkan origin server saat ini
         // Memastikan protocol selalu https jika berjalan di production server
-        const host = req.headers['x-forwarded-host'] || req.get('host') || '';
+        const rawHost = req.headers['x-forwarded-host'] || req.get('host') || '';
+        const host = Array.isArray(rawHost) ? rawHost[0] : rawHost;
         const protocol = host.includes('localhost') ? 'http' : 'https';
         // Hasil URL: https://jimpitan-server.appsbee.my.id/uploads/apks/nama-file.apk
         const fileUrl = `${protocol}://${host}/uploads/apks/${req.file.filename}`;
-        // Bersihkan file APK lama (Maksimal 5 file)
+        // Bersihkan file APK lama (Maksimal 3 file)
         try {
             const files = fs_1.default.readdirSync(uploadDir);
             const apkFiles = files
@@ -62,9 +63,9 @@ const uploadApk = (req, res) => {
                 return { name: f, path: filePath, time: stat.mtime.getTime() };
             })
                 .sort((a, b) => b.time - a.time); // Urutkan dari yang terbaru (descending)
-            // Jika lebih dari 5, hapus sisanya (yang paling lama)
-            if (apkFiles.length > 5) {
-                const filesToDelete = apkFiles.slice(5);
+            // Jika lebih dari 3, hapus sisanya (yang paling lama)
+            if (apkFiles.length > 3) {
+                const filesToDelete = apkFiles.slice(3);
                 for (const fileToDelete of filesToDelete) {
                     fs_1.default.unlinkSync(fileToDelete.path);
                 }
