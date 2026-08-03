@@ -46,9 +46,10 @@ export const uploadApk = (req: Request, res: Response) => {
     }
 
     // Bangun URL statis berdasarkan origin server saat ini
-    const protocol = req.protocol;
-    const host = req.get('host');
-    // Hasil URL: http://localhost:3000/uploads/apks/nama-file.apk
+    // Memastikan protocol https jika berjalan di production (cPanel reverse proxy)
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+    const host = req.headers['x-forwarded-host'] || req.get('host');
+    // Hasil URL: https://jimpitan-server.appsbee.my.id/uploads/apks/nama-file.apk
     const fileUrl = `${protocol}://${host}/uploads/apks/${req.file.filename}`;
 
     // Bersihkan file APK lama (Maksimal 5 file)
