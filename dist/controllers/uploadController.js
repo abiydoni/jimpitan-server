@@ -46,9 +46,9 @@ const uploadApk = (req, res) => {
             return res.status(400).json({ success: false, message: 'File APK tidak ditemukan dalam request.' });
         }
         // Bangun URL statis berdasarkan origin server saat ini
-        // Memastikan protocol https jika berjalan di production (cPanel reverse proxy)
-        const protocol = req.headers['x-forwarded-proto'] || req.protocol;
-        const host = req.headers['x-forwarded-host'] || req.get('host');
+        // Memastikan protocol selalu https jika berjalan di production server
+        const host = req.headers['x-forwarded-host'] || req.get('host') || '';
+        const protocol = host.includes('localhost') ? 'http' : 'https';
         // Hasil URL: https://jimpitan-server.appsbee.my.id/uploads/apks/nama-file.apk
         const fileUrl = `${protocol}://${host}/uploads/apks/${req.file.filename}`;
         // Bersihkan file APK lama (Maksimal 5 file)
