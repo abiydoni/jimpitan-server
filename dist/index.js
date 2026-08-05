@@ -21,6 +21,7 @@ const superadminRoutes_1 = __importDefault(require("./routes/superadminRoutes"))
 const saasRoutes_1 = __importDefault(require("./routes/saasRoutes"));
 const monitorRoutes_1 = __importDefault(require("./routes/monitorRoutes"));
 const configRoutes_1 = __importDefault(require("./routes/configRoutes"));
+const securityRoutes_1 = __importDefault(require("./routes/securityRoutes"));
 const path_1 = __importDefault(require("path"));
 const saasJobs_1 = require("./cron/saasJobs");
 const startupLogs_1 = require("./utils/startupLogs");
@@ -73,6 +74,7 @@ app.use('/api/superadmin', superadminRoutes_1.default);
 app.use('/api/config', configRoutes_1.default);
 app.use('/api/saas', saasRoutes_1.default);
 app.use('/api/server', monitorRoutes_1.default);
+app.use('/api/security', securityRoutes_1.default);
 // Endpoint sederhana untuk testing (Sekarang dilayani oleh public/index.html)
 // app.get('/', (req, res) => {
 //   res.send('API Jimpitan Backend berjalan normal.');
