@@ -36,11 +36,18 @@ const initSaasCronJobs = () => {
                 console.warn('⚠️ Auto-Backup dilewati: GDRIVE_FOLDER_ID belum dikonfigurasi di .env');
                 return;
             }
+            // Buat format bulan-tahun (misal: "Agustus-2026")
+            const currentMonthYear = new Date().toLocaleString('id-ID', { month: 'long', year: 'numeric' }).replace(/ /g, '-');
+            // Dapatkan atau buat sub-folder untuk bulan ini
+            const targetFolderId = await (0, gdriveService_1.getOrCreateFolder)(currentMonthYear, gdriveFolderId);
+            // Buat format tanggal (misal: "05-Agustus-2026")
+            const currentDate = new Date().toLocaleString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }).replace(/ /g, '-');
+            const customFileName = `jimpitan-${currentDate}.sql`;
             // 1. Buat file .sql secara lokal
             const sqlFilePath = await (0, dbBackup_1.generateDatabaseBackup)();
             console.log(`✅ File backup lokal berhasil dibuat: ${sqlFilePath}`);
-            // 2. Upload ke Google Drive
-            const uploadResult = await (0, gdriveService_1.uploadFileToDrive)(sqlFilePath, gdriveFolderId);
+            // 2. Upload ke Google Drive dengan nama custom dan ke folder bulan ini
+            const uploadResult = await (0, gdriveService_1.uploadFileToDrive)(sqlFilePath, targetFolderId, customFileName);
             console.log(`✅ Berhasil diunggah ke GDrive: ${uploadResult.name} (Link: ${uploadResult.webViewLink})`);
             // 3. Hapus file lokal setelah berhasil di-upload untuk hemat disk
             if (fs_1.default.existsSync(sqlFilePath)) {

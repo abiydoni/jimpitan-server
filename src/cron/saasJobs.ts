@@ -4,7 +4,7 @@ import { VillageSubscription, SubscriptionPlan, Invoice, User, Village } from '.
 import { addStartupLog } from '../utils/startupLogs';
 import { addJakartaDays } from '../utils/jakartaTime';
 import { generateDatabaseBackup } from '../utils/dbBackup';
-import { uploadFileToDrive } from '../services/gdriveService';
+import { uploadFileToDrive, getOrCreateFolder } from '../services/gdriveService';
 import fs from 'fs';
 
 // Fungsi untuk menjadwalkan semua tugas latar belakang SaaS
@@ -34,12 +34,22 @@ export const initSaasCronJobs = () => {
         return;
       }
 
+      // Buat format bulan-tahun (misal: "Agustus-2026")
+      const currentMonthYear = new Date().toLocaleString('id-ID', { month: 'long', year: 'numeric' }).replace(/ /g, '-');
+      
+      // Dapatkan atau buat sub-folder untuk bulan ini
+      const targetFolderId = await getOrCreateFolder(currentMonthYear, gdriveFolderId);
+
+      // Buat format tanggal (misal: "05-Agustus-2026")
+      const currentDate = new Date().toLocaleString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }).replace(/ /g, '-');
+      const customFileName = `jimpitan-${currentDate}.sql`;
+
       // 1. Buat file .sql secara lokal
       const sqlFilePath = await generateDatabaseBackup();
       console.log(`✅ File backup lokal berhasil dibuat: ${sqlFilePath}`);
 
-      // 2. Upload ke Google Drive
-      const uploadResult = await uploadFileToDrive(sqlFilePath, gdriveFolderId);
+      // 2. Upload ke Google Drive dengan nama custom dan ke folder bulan ini
+      const uploadResult = await uploadFileToDrive(sqlFilePath, targetFolderId, customFileName);
       console.log(`✅ Berhasil diunggah ke GDrive: ${uploadResult.name} (Link: ${uploadResult.webViewLink})`);
       
       // 3. Hapus file lokal setelah berhasil di-upload untuk hemat disk

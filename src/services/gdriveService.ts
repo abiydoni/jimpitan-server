@@ -21,19 +21,52 @@ const getDriveService = () => {
   return google.drive({ version: 'v3', auth });
 };
 
+export const getOrCreateFolder = async (folderName: string, parentFolderId: string): Promise<string> => {
+  const drive = getDriveService();
+  
+  try {
+    const res = await drive.files.list({
+      q: `mimeType='application/vnd.google-apps.folder' and name='${folderName}' and '${parentFolderId}' in parents and trashed=false`,
+      fields: 'files(id, name)',
+      spaces: 'drive',
+    });
+    
+    if (res.data.files && res.data.files.length > 0) {
+      return res.data.files[0].id as string;
+    }
+    
+    const fileMetadata = {
+      name: folderName,
+      mimeType: 'application/vnd.google-apps.folder',
+      parents: [parentFolderId],
+    };
+    
+    const folderRes = await drive.files.create({
+      requestBody: fileMetadata,
+      fields: 'id',
+    });
+    
+    return folderRes.data.id as string;
+  } catch (error) {
+    console.error('❌ Gagal mencari/membuat folder di GDrive:', error);
+    throw error;
+  }
+};
+
 /**
  * Mengunggah file ke Google Drive (ke dalam folder tertentu).
  * @param filePath Path lokal ke file yang akan diunggah
  * @param folderId ID Folder Google Drive tujuan
+ * @param customFileName (Opsional) Nama file custom saat diunggah
  * @returns Metadata file yang berhasil diunggah
  */
-export const uploadFileToDrive = async (filePath: string, folderId: string) => {
+export const uploadFileToDrive = async (filePath: string, folderId: string, customFileName?: string) => {
   if (!fs.existsSync(filePath)) {
     throw new Error(`File lokal tidak ditemukan: ${filePath}`);
   }
 
   const drive = getDriveService();
-  const fileName = path.basename(filePath);
+  const fileName = customFileName || path.basename(filePath);
 
   const fileMetadata = {
     name: fileName,

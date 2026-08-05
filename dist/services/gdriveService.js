@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.uploadFileToDrive = void 0;
+exports.uploadFileToDrive = exports.getOrCreateFolder = void 0;
 const googleapis_1 = require("googleapis");
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
@@ -22,18 +22,47 @@ const getDriveService = () => {
     });
     return googleapis_1.google.drive({ version: 'v3', auth });
 };
+const getOrCreateFolder = async (folderName, parentFolderId) => {
+    const drive = getDriveService();
+    try {
+        const res = await drive.files.list({
+            q: `mimeType='application/vnd.google-apps.folder' and name='${folderName}' and '${parentFolderId}' in parents and trashed=false`,
+            fields: 'files(id, name)',
+            spaces: 'drive',
+        });
+        if (res.data.files && res.data.files.length > 0) {
+            return res.data.files[0].id;
+        }
+        const fileMetadata = {
+            name: folderName,
+            mimeType: 'application/vnd.google-apps.folder',
+            parents: [parentFolderId],
+        };
+        const folderRes = await drive.files.create({
+            requestBody: fileMetadata,
+            fields: 'id',
+        });
+        return folderRes.data.id;
+    }
+    catch (error) {
+        console.error('❌ Gagal mencari/membuat folder di GDrive:', error);
+        throw error;
+    }
+};
+exports.getOrCreateFolder = getOrCreateFolder;
 /**
  * Mengunggah file ke Google Drive (ke dalam folder tertentu).
  * @param filePath Path lokal ke file yang akan diunggah
  * @param folderId ID Folder Google Drive tujuan
+ * @param customFileName (Opsional) Nama file custom saat diunggah
  * @returns Metadata file yang berhasil diunggah
  */
-const uploadFileToDrive = async (filePath, folderId) => {
+const uploadFileToDrive = async (filePath, folderId, customFileName) => {
     if (!fs_1.default.existsSync(filePath)) {
         throw new Error(`File lokal tidak ditemukan: ${filePath}`);
     }
     const drive = getDriveService();
-    const fileName = path_1.default.basename(filePath);
+    const fileName = customFileName || path_1.default.basename(filePath);
     const fileMetadata = {
         name: fileName,
         parents: [folderId], // Upload ke dalam folder ini
