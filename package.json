@@ -17,6 +17,7 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "firebase-admin": "^14.1.0",
+    "googleapis": "^174.0.0",
     "multer": "^2.2.0",
     "mysql2": "^3.22.6",
     "node-cron": "^4.6.0",

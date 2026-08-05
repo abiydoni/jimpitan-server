@@ -9,6 +9,9 @@ const sequelize_1 = require("sequelize");
 const models_1 = require("../models");
 const startupLogs_1 = require("../utils/startupLogs");
 const jakartaTime_1 = require("../utils/jakartaTime");
+const dbBackup_1 = require("../utils/dbBackup");
+const gdriveService_1 = require("../services/gdriveService");
+const fs_1 = __importDefault(require("fs"));
 // Fungsi untuk menjadwalkan semua tugas latar belakang SaaS
 const initSaasCronJobs = () => {
     (0, startupLogs_1.addStartupLog)('✅ Cron Jobs SaaS diinisialisasi (Berjalan setiap jam 00:00)');
@@ -22,6 +25,30 @@ const initSaasCronJobs = () => {
         }
         catch (error) {
             console.error('❌ Gagal mengeksekusi Cron Jobs SaaS:', error);
+        }
+    });
+    // Jadwal: Setiap hari jam 02:00 pagi WIB untuk Auto-Backup Google Drive
+    node_cron_1.default.schedule('0 2 * * *', async () => {
+        console.log('⏳ Memulai eksekusi Auto-Backup Google Drive (Jam 02:00)...');
+        try {
+            const gdriveFolderId = process.env.GDRIVE_FOLDER_ID;
+            if (!gdriveFolderId || gdriveFolderId === 'xxxxxx') {
+                console.warn('⚠️ Auto-Backup dilewati: GDRIVE_FOLDER_ID belum dikonfigurasi di .env');
+                return;
+            }
+            // 1. Buat file .sql secara lokal
+            const sqlFilePath = await (0, dbBackup_1.generateDatabaseBackup)();
+            console.log(`✅ File backup lokal berhasil dibuat: ${sqlFilePath}`);
+            // 2. Upload ke Google Drive
+            const uploadResult = await (0, gdriveService_1.uploadFileToDrive)(sqlFilePath, gdriveFolderId);
+            console.log(`✅ Berhasil diunggah ke GDrive: ${uploadResult.name} (Link: ${uploadResult.webViewLink})`);
+            // 3. Hapus file lokal setelah berhasil di-upload untuk hemat disk
+            if (fs_1.default.existsSync(sqlFilePath)) {
+                fs_1.default.unlinkSync(sqlFilePath);
+            }
+        }
+        catch (error) {
+            console.error('❌ Gagal melakukan Auto-Backup Google Drive:', error);
         }
     });
 };

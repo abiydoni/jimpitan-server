@@ -3,6 +3,9 @@ import { Op } from 'sequelize';
 import { VillageSubscription, SubscriptionPlan, Invoice, User, Village } from '../models';
 import { addStartupLog } from '../utils/startupLogs';
 import { addJakartaDays } from '../utils/jakartaTime';
+import { generateDatabaseBackup } from '../utils/dbBackup';
+import { uploadFileToDrive } from '../services/gdriveService';
+import fs from 'fs';
 
 // Fungsi untuk menjadwalkan semua tugas latar belakang SaaS
 export const initSaasCronJobs = () => {
@@ -18,6 +21,33 @@ export const initSaasCronJobs = () => {
       // await sendReminders(); // (Opsional: Kirim FCM ke user)
     } catch (error) {
       console.error('❌ Gagal mengeksekusi Cron Jobs SaaS:', error);
+    }
+  });
+
+  // Jadwal: Setiap hari jam 02:00 pagi WIB untuk Auto-Backup Google Drive
+  cron.schedule('0 2 * * *', async () => {
+    console.log('⏳ Memulai eksekusi Auto-Backup Google Drive (Jam 02:00)...');
+    try {
+      const gdriveFolderId = process.env.GDRIVE_FOLDER_ID;
+      if (!gdriveFolderId || gdriveFolderId === 'xxxxxx') {
+        console.warn('⚠️ Auto-Backup dilewati: GDRIVE_FOLDER_ID belum dikonfigurasi di .env');
+        return;
+      }
+
+      // 1. Buat file .sql secara lokal
+      const sqlFilePath = await generateDatabaseBackup();
+      console.log(`✅ File backup lokal berhasil dibuat: ${sqlFilePath}`);
+
+      // 2. Upload ke Google Drive
+      const uploadResult = await uploadFileToDrive(sqlFilePath, gdriveFolderId);
+      console.log(`✅ Berhasil diunggah ke GDrive: ${uploadResult.name} (Link: ${uploadResult.webViewLink})`);
+      
+      // 3. Hapus file lokal setelah berhasil di-upload untuk hemat disk
+      if (fs.existsSync(sqlFilePath)) {
+        fs.unlinkSync(sqlFilePath);
+      }
+    } catch (error) {
+      console.error('❌ Gagal melakukan Auto-Backup Google Drive:', error);
     }
   });
 };
