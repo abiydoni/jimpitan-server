@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { Op } from 'sequelize';
 import { Village, User, Menu, Slide, Role, UserRole, Tariff, sequelize, SubscriptionPlan, VillageSubscription, ChatMessage, DuesJournal, JimpitanHistory } from '../models';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -283,10 +284,17 @@ export const getUsers = async (req: Request, res: Response): Promise<void> => {
 export const deleteUserFamily = async (req: Request, res: Response): Promise<void> => {
   try {
     const { familyId } = req.params;
-    await User.destroy({ where: { familyId } });
+    await User.destroy({
+      where: {
+        [Op.or]: [
+          { familyId },
+          { uid: familyId }
+        ]
+      }
+    });
     const { firebaseService } = require('../services/firebaseService');
     firebaseService.sendSyncNotification(req.body.villageId || 'all', 'REFRESH_USERS');
-    res.json({ success: true, message: 'Family deleted' });
+    res.json({ success: true, message: 'Family or user deleted' });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -295,16 +303,34 @@ export const deleteUserFamily = async (req: Request, res: Response): Promise<voi
 export const saveUserFamily = async (req: Request, res: Response): Promise<void> => {
   const transaction = await sequelize.transaction();
   try {
-    const { familyId, uniqueCode, villageId, familyMembers, deletedDocIds } = req.body;
+    const { familyId, uniqueCode, villageId, noKK, alamat, address, phone, phoneNumber, familyMembers, deletedDocIds } = req.body;
     
     // Process deletes
     if (deletedDocIds && deletedDocIds.length > 0) {
       await User.destroy({ where: { uid: deletedDocIds }, transaction });
     }
 
+    const familyNoKK = noKK ?? '';
+    const familyAlamat = alamat ?? address ?? '';
+    const familyPhone = phone ?? phoneNumber ?? '';
+
     // Process upserts
     for (const member of familyMembers) {
-      const { docId, roles, ...userData } = member;
+      const { docId, roles, email, ...userData } = member;
+
+      // Sanitize email: convert empty string to null so MySQL unique index won't fail
+      const sanitizedEmail = (typeof email === 'string' && email.trim().length > 0)
+        ? email.trim()
+        : null;
+
+      const sanitizedMemberData = {
+        ...userData,
+        email: sanitizedEmail,
+        noKK: member.noKK ?? familyNoKK,
+        alamat: member.alamat ?? member.address ?? familyAlamat,
+        phoneNumber: member.phoneNumber ?? member.phone ?? familyPhone,
+      };
+
       const [user, created] = await User.findOrCreate({
         where: { uid: docId },
         defaults: {
@@ -313,7 +339,7 @@ export const saveUserFamily = async (req: Request, res: Response): Promise<void>
           uniqueCode,
           villageId,
           status: 'ACTIVE',
-          ...userData
+          ...sanitizedMemberData
         },
         transaction
       });
@@ -324,15 +350,14 @@ export const saveUserFamily = async (req: Request, res: Response): Promise<void>
           uniqueCode,
           villageId,
           status: 'ACTIVE',
-          ...userData
+          ...sanitizedMemberData
         }, { transaction });
       }
-      console.log('--- DEBUG USER createdAt ---', userData.createdAt);
+
       if (userData.createdAt) {
         (user as any).setDataValue('createdAt', new Date(userData.createdAt as string));
         (user as any).changed('createdAt', true);
         await user.save({ transaction });
-        console.log('--- USER CREATED AT UPDATED ---', user.getDataValue('createdAt'));
       }
 
       // Process roles

@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.bulkImportUsers = exports.updateOnlineStatus = exports.removeFcmToken = exports.updateFcmToken = exports.deleteSlide = exports.updateSlide = exports.createSlide = exports.getSlides = exports.deleteMenu = exports.updateMenu = exports.getMenus = exports.linkUserAccount = exports.updateUserRoles = exports.updateUserStatus = exports.getUserById = exports.saveUserFamily = exports.deleteUserFamily = exports.getUsers = exports.registerVillage = exports.deleteVillage = exports.updateVillage = exports.createVillage = exports.getVillageById = exports.getVillages = void 0;
+const sequelize_1 = require("sequelize");
 const models_1 = require("../models");
 const uuid_1 = require("uuid");
 // Villages
@@ -271,10 +272,17 @@ exports.getUsers = getUsers;
 const deleteUserFamily = async (req, res) => {
     try {
         const { familyId } = req.params;
-        await models_1.User.destroy({ where: { familyId } });
+        await models_1.User.destroy({
+            where: {
+                [sequelize_1.Op.or]: [
+                    { familyId },
+                    { uid: familyId }
+                ]
+            }
+        });
         const { firebaseService } = require('../services/firebaseService');
         firebaseService.sendSyncNotification(req.body.villageId || 'all', 'REFRESH_USERS');
-        res.json({ success: true, message: 'Family deleted' });
+        res.json({ success: true, message: 'Family or user deleted' });
     }
     catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -284,14 +292,28 @@ exports.deleteUserFamily = deleteUserFamily;
 const saveUserFamily = async (req, res) => {
     const transaction = await models_1.sequelize.transaction();
     try {
-        const { familyId, uniqueCode, villageId, familyMembers, deletedDocIds } = req.body;
+        const { familyId, uniqueCode, villageId, noKK, alamat, address, phone, phoneNumber, familyMembers, deletedDocIds } = req.body;
         // Process deletes
         if (deletedDocIds && deletedDocIds.length > 0) {
             await models_1.User.destroy({ where: { uid: deletedDocIds }, transaction });
         }
+        const familyNoKK = noKK ?? '';
+        const familyAlamat = alamat ?? address ?? '';
+        const familyPhone = phone ?? phoneNumber ?? '';
         // Process upserts
         for (const member of familyMembers) {
-            const { docId, roles, ...userData } = member;
+            const { docId, roles, email, ...userData } = member;
+            // Sanitize email: convert empty string to null so MySQL unique index won't fail
+            const sanitizedEmail = (typeof email === 'string' && email.trim().length > 0)
+                ? email.trim()
+                : null;
+            const sanitizedMemberData = {
+                ...userData,
+                email: sanitizedEmail,
+                noKK: member.noKK ?? familyNoKK,
+                alamat: member.alamat ?? member.address ?? familyAlamat,
+                phoneNumber: member.phoneNumber ?? member.phone ?? familyPhone,
+            };
             const [user, created] = await models_1.User.findOrCreate({
                 where: { uid: docId },
                 defaults: {
@@ -300,7 +322,7 @@ const saveUserFamily = async (req, res) => {
                     uniqueCode,
                     villageId,
                     status: 'ACTIVE',
-                    ...userData
+                    ...sanitizedMemberData
                 },
                 transaction
             });
@@ -310,15 +332,13 @@ const saveUserFamily = async (req, res) => {
                     uniqueCode,
                     villageId,
                     status: 'ACTIVE',
-                    ...userData
+                    ...sanitizedMemberData
                 }, { transaction });
             }
-            console.log('--- DEBUG USER createdAt ---', userData.createdAt);
             if (userData.createdAt) {
                 user.setDataValue('createdAt', new Date(userData.createdAt));
                 user.changed('createdAt', true);
                 await user.save({ transaction });
-                console.log('--- USER CREATED AT UPDATED ---', user.getDataValue('createdAt'));
             }
             // Process roles
             if (roles && Array.isArray(roles)) {

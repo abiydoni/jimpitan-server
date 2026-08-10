@@ -51,7 +51,7 @@ export class User extends Model {
 User.init({
   uid: { type: DataTypes.STRING(128), primaryKey: true },
   name: { type: DataTypes.STRING(255), allowNull: false },
-  email: { type: DataTypes.STRING(255), unique: true, allowNull: false },
+  email: { type: DataTypes.STRING(255), unique: true, allowNull: true },
   photoUrl: { type: DataTypes.TEXT('long'), allowNull: true },
   foto: { type: DataTypes.TEXT('long'), allowNull: true },
   phoneNumber: { type: DataTypes.STRING(20), allowNull: true },

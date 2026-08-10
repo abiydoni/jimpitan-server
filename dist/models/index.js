@@ -69,7 +69,7 @@ exports.User = User;
 User.init({
     uid: { type: sequelize_1.DataTypes.STRING(128), primaryKey: true },
     name: { type: sequelize_1.DataTypes.STRING(255), allowNull: false },
-    email: { type: sequelize_1.DataTypes.STRING(255), unique: true, allowNull: false },
+    email: { type: sequelize_1.DataTypes.STRING(255), unique: true, allowNull: true },
     photoUrl: { type: sequelize_1.DataTypes.TEXT('long'), allowNull: true },
     foto: { type: sequelize_1.DataTypes.TEXT('long'), allowNull: true },
     phoneNumber: { type: sequelize_1.DataTypes.STRING(20), allowNull: true },
