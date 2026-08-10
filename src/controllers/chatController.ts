@@ -276,7 +276,12 @@ export const getUnreadCounts = async (req: AuthRequest, res: Response): Promise<
     // - User biasa: hanya grup dari desanya sendiri
     const groupCondition: any = { roomId: { [Op.like]: 'GROUP_%' } };
     if (uid !== 'SUPER_ADMIN') {
-      groupCondition.villageId = userVillageId || '__NONE__';
+      groupCondition[Op.or] = [
+        { villageId: userVillageId || '__NONE__' },
+        { villageId: null },
+        { villageId: 'ALL' },
+        { roomId: 'GROUP_ADMINS' }
+      ];
     }
 
     const unreadMessages = await Message.findAll({

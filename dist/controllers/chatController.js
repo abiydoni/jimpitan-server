@@ -245,7 +245,12 @@ const getUnreadCounts = async (req, res) => {
         // - User biasa: hanya grup dari desanya sendiri
         const groupCondition = { roomId: { [sequelize_1.Op.like]: 'GROUP_%' } };
         if (uid !== 'SUPER_ADMIN') {
-            groupCondition.villageId = userVillageId || '__NONE__';
+            groupCondition[sequelize_1.Op.or] = [
+                { villageId: userVillageId || '__NONE__' },
+                { villageId: null },
+                { villageId: 'ALL' },
+                { roomId: 'GROUP_ADMINS' }
+            ];
         }
         const unreadMessages = await models_1.ChatMessage.findAll({
             where: {
