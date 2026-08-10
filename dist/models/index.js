@@ -14,7 +14,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sequelize = exports.SystemSetting = exports.JimpitanHistory = exports.DuesJournal = exports.InventoryLoan = exports.InventoryItem = exports.Exemption = exports.Tariff = exports.Schedule = exports.Slide = exports.ChatMessage = exports.Menu = exports.UserRole = exports.Role = exports.User = exports.Village = void 0;
+exports.sequelize = exports.SystemSetting = exports.JimpitanHistory = exports.DuesJournal = exports.InventoryLoan = exports.InventoryItem = exports.Exemption = exports.Tariff = exports.Schedule = exports.Slide = exports.GroupReadState = exports.ChatMessage = exports.Menu = exports.UserRole = exports.Role = exports.User = exports.Village = void 0;
 const sequelize_1 = require("sequelize");
 const database_1 = require("../config/database");
 Object.defineProperty(exports, "sequelize", { enumerable: true, get: function () { return database_1.sequelize; } });
@@ -168,6 +168,22 @@ ChatMessage.init({
     replyToSenderName: { type: sequelize_1.DataTypes.STRING(255), allowNull: true },
     isForwarded: { type: sequelize_1.DataTypes.BOOLEAN, defaultValue: false },
 }, { sequelize: database_1.sequelize, modelName: 'chatMessage', tableName: 'chat_messages', timestamps: true });
+// ---------------------------
+// 4b. Model GroupReadState
+// ---------------------------
+class GroupReadState extends sequelize_1.Model {
+    id;
+    userId;
+    roomId;
+    lastReadAt;
+}
+exports.GroupReadState = GroupReadState;
+GroupReadState.init({
+    id: { type: sequelize_1.DataTypes.STRING(255), primaryKey: true },
+    userId: { type: sequelize_1.DataTypes.STRING(128), allowNull: false },
+    roomId: { type: sequelize_1.DataTypes.STRING(128), allowNull: false },
+    lastReadAt: { type: sequelize_1.DataTypes.DATE, allowNull: false, defaultValue: sequelize_1.DataTypes.NOW },
+}, { sequelize: database_1.sequelize, modelName: 'groupReadState', tableName: 'group_read_states', timestamps: true });
 // ---------------------------
 // 5. Model Slide (Banner)
 // ---------------------------

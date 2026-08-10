@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
-import { User, sequelize, ChatMessage as Message } from '../models'; // Impor ChatMessage sebagai Message
+import { User, sequelize, ChatMessage as Message, GroupReadState } from '../models';
 import { Op } from 'sequelize';
 import { sendChatNotification } from '../services/firebaseService';
 import { v4 as uuidv4 } from 'uuid';
@@ -267,57 +267,63 @@ export const getUnreadCounts = async (req: AuthRequest, res: Response): Promise<
       return;
     }
 
-    // Cari desa user ini untuk membatasi grup yang terlihat
-    const currentUser = await User.findOne({ where: { uid }, attributes: ['villageId'] });
-    const userVillageId = currentUser?.getDataValue('villageId');
+    const counts: Record<string, number> = {};
 
-    // Buat kondisi untuk pesan grup:
-    // - Super Admin: lihat semua grup (tidak filter villageId karena pesannya bisa null)
-    // - User biasa: hanya grup dari desanya sendiri
-    const groupCondition: any = { roomId: { [Op.like]: 'GROUP_%' } };
-    if (uid !== 'SUPER_ADMIN') {
-      groupCondition[Op.or] = [
-        { villageId: userVillageId || '__NONE__' },
-        { villageId: null },
-        { villageId: 'ALL' },
-        { roomId: 'GROUP_ADMINS' }
-      ];
-    }
-
-    const unreadMessages = await Message.findAll({
+    // 1. Pesan Personal Unread
+    const unreadPersonalMessages = await Message.findAll({
       where: {
-        [Op.or]: [
-          { receiverUid: uid }, // Pesan personal
-          groupCondition,       // Pesan grup sesuai akses
-        ],
+        receiverUid: uid,
         isRead: false,
-        senderUid: { [Op.ne]: uid }, // Jangan hitung pesan dari diri sendiri
+        senderUid: { [Op.ne]: uid },
       },
-      order: [['createdAt', 'DESC']],
+      attributes: ['senderUid', 'roomId'],
     });
 
-    const counts: Record<string, number> = {};
-    const detailsMap: Record<string, any> = {};
-
-    unreadMessages.forEach((msg: any) => {
+    unreadPersonalMessages.forEach((msg: any) => {
       const key = msg.getDataValue('roomId') || msg.getDataValue('senderUid');
       if (key) {
         counts[key] = (counts[key] || 0) + 1;
-        if (!detailsMap[key]) {
-          detailsMap[key] = {
-            senderUid: msg.getDataValue('senderUid'),
-            senderName: msg.getDataValue('senderName'),
-            message: msg.getDataValue('message'),
-            roomId: msg.getDataValue('roomId'),
-            createdAt: msg.getDataValue('createdAt'),
-          };
-        }
       }
     });
 
-    const detailsArray = Object.values(detailsMap).slice(0, 5);
+    // 2. Pesan Grup Unread (berdasarkan GroupReadState per user)
+    const currentUser = await User.findOne({ where: { uid }, attributes: ['villageId'] });
+    const userVillageId = currentUser?.getDataValue('villageId');
 
-    res.json({ success: true, data: counts, details: detailsArray });
+    const userGroupRooms: string[] = ['GROUP_ADMINS'];
+    if (userVillageId) {
+      userGroupRooms.push(`GROUP_${userVillageId}`);
+    }
+
+    const readStates = await GroupReadState.findAll({
+      where: {
+        userId: uid,
+        roomId: userGroupRooms,
+      },
+    });
+
+    const readStateMap: Record<string, Date> = {};
+    readStates.forEach((rs: any) => {
+      readStateMap[rs.getDataValue('roomId')] = new Date(rs.getDataValue('lastReadAt'));
+    });
+
+    for (const roomId of userGroupRooms) {
+      const lastReadAt = readStateMap[roomId] || new Date(0);
+      
+      const unreadCount = await Message.count({
+        where: {
+          roomId,
+          senderUid: { [Op.ne]: uid },
+          createdAt: { [Op.gt]: lastReadAt },
+        },
+      });
+
+      if (unreadCount > 0) {
+        counts[roomId] = unreadCount;
+      }
+    }
+
+    res.json({ success: true, data: counts });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -332,19 +338,31 @@ export const markMessagesRead = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
-    let whereClause: any = {};
-    if (roomId) {
-      // Grup: tandai semua pesan di room ini yang bukan dari diri sendiri
-      whereClause = { roomId, senderUid: { [Op.ne]: uid } };
-    } else if (senderUid) {
-      // Personal: tandai pesan dari senderUid yang ditujukan ke uid
-      whereClause = { senderUid, receiverUid: uid };
-    } else {
-      res.status(400).json({ success: false, message: 'roomId atau senderUid diperlukan' });
+    if (roomId && typeof roomId === 'string' && roomId.startsWith('GROUP_')) {
+      // Group chat: perbarui lastReadAt khusus untuk user ini di room ini
+      const id = `grs_${uid}_${roomId}`;
+      await GroupReadState.upsert({
+        id,
+        userId: uid,
+        roomId,
+        lastReadAt: new Date(),
+      });
+      res.json({ success: true, message: 'Pesan grup ditandai terbaca' });
       return;
     }
 
-    await Message.update({ isRead: true }, { where: whereClause });
+    // Personal chat: tandai pesan dari senderUid yang ditujukan ke receiverUid (uid)
+    if (senderUid) {
+      await Message.update(
+        { isRead: true },
+        { where: { senderUid, receiverUid: uid, isRead: false } }
+      );
+    } else if (roomId) {
+      await Message.update(
+        { isRead: true },
+        { where: { roomId, senderUid: { [Op.ne]: uid }, isRead: false } }
+      );
+    }
 
     res.json({ success: true, message: 'Pesan ditandai terbaca' });
   } catch (error: any) {

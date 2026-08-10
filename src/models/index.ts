@@ -149,6 +149,22 @@ ChatMessage.init({
 }, { sequelize, modelName: 'chatMessage', tableName: 'chat_messages', timestamps: true });
 
 // ---------------------------
+// 4b. Model GroupReadState
+// ---------------------------
+export class GroupReadState extends Model {
+  public id!: string;
+  public userId!: string;
+  public roomId!: string;
+  public lastReadAt!: Date;
+}
+GroupReadState.init({
+  id: { type: DataTypes.STRING(255), primaryKey: true },
+  userId: { type: DataTypes.STRING(128), allowNull: false },
+  roomId: { type: DataTypes.STRING(128), allowNull: false },
+  lastReadAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+}, { sequelize, modelName: 'groupReadState', tableName: 'group_read_states', timestamps: true });
+
+// ---------------------------
 // 5. Model Slide (Banner)
 // ---------------------------
 export class Slide extends Model {}

@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.markMessagesRead = exports.getUnreadCounts = exports.updateMessage = exports.getMessages = exports.getChatContacts = exports.sendMessage = void 0;
-const models_1 = require("../models"); // Impor ChatMessage sebagai Message
+const models_1 = require("../models");
 const sequelize_1 = require("sequelize");
 const firebaseService_1 = require("../services/firebaseService");
 const uuid_1 = require("uuid");
@@ -237,51 +237,53 @@ const getUnreadCounts = async (req, res) => {
             res.status(400).json({ success: false, message: 'UID diperlukan' });
             return;
         }
-        // Cari desa user ini untuk membatasi grup yang terlihat
-        const currentUser = await models_1.User.findOne({ where: { uid }, attributes: ['villageId'] });
-        const userVillageId = currentUser?.getDataValue('villageId');
-        // Buat kondisi untuk pesan grup:
-        // - Super Admin: lihat semua grup (tidak filter villageId karena pesannya bisa null)
-        // - User biasa: hanya grup dari desanya sendiri
-        const groupCondition = { roomId: { [sequelize_1.Op.like]: 'GROUP_%' } };
-        if (uid !== 'SUPER_ADMIN') {
-            groupCondition[sequelize_1.Op.or] = [
-                { villageId: userVillageId || '__NONE__' },
-                { villageId: null },
-                { villageId: 'ALL' },
-                { roomId: 'GROUP_ADMINS' }
-            ];
-        }
-        const unreadMessages = await models_1.ChatMessage.findAll({
-            where: {
-                [sequelize_1.Op.or]: [
-                    { receiverUid: uid }, // Pesan personal
-                    groupCondition, // Pesan grup sesuai akses
-                ],
-                isRead: false,
-                senderUid: { [sequelize_1.Op.ne]: uid }, // Jangan hitung pesan dari diri sendiri
-            },
-            order: [['createdAt', 'DESC']],
-        });
         const counts = {};
-        const detailsMap = {};
-        unreadMessages.forEach((msg) => {
+        // 1. Pesan Personal Unread
+        const unreadPersonalMessages = await models_1.ChatMessage.findAll({
+            where: {
+                receiverUid: uid,
+                isRead: false,
+                senderUid: { [sequelize_1.Op.ne]: uid },
+            },
+            attributes: ['senderUid', 'roomId'],
+        });
+        unreadPersonalMessages.forEach((msg) => {
             const key = msg.getDataValue('roomId') || msg.getDataValue('senderUid');
             if (key) {
                 counts[key] = (counts[key] || 0) + 1;
-                if (!detailsMap[key]) {
-                    detailsMap[key] = {
-                        senderUid: msg.getDataValue('senderUid'),
-                        senderName: msg.getDataValue('senderName'),
-                        message: msg.getDataValue('message'),
-                        roomId: msg.getDataValue('roomId'),
-                        createdAt: msg.getDataValue('createdAt'),
-                    };
-                }
             }
         });
-        const detailsArray = Object.values(detailsMap).slice(0, 5);
-        res.json({ success: true, data: counts, details: detailsArray });
+        // 2. Pesan Grup Unread (berdasarkan GroupReadState per user)
+        const currentUser = await models_1.User.findOne({ where: { uid }, attributes: ['villageId'] });
+        const userVillageId = currentUser?.getDataValue('villageId');
+        const userGroupRooms = ['GROUP_ADMINS'];
+        if (userVillageId) {
+            userGroupRooms.push(`GROUP_${userVillageId}`);
+        }
+        const readStates = await models_1.GroupReadState.findAll({
+            where: {
+                userId: uid,
+                roomId: userGroupRooms,
+            },
+        });
+        const readStateMap = {};
+        readStates.forEach((rs) => {
+            readStateMap[rs.getDataValue('roomId')] = new Date(rs.getDataValue('lastReadAt'));
+        });
+        for (const roomId of userGroupRooms) {
+            const lastReadAt = readStateMap[roomId] || new Date(0);
+            const unreadCount = await models_1.ChatMessage.count({
+                where: {
+                    roomId,
+                    senderUid: { [sequelize_1.Op.ne]: uid },
+                    createdAt: { [sequelize_1.Op.gt]: lastReadAt },
+                },
+            });
+            if (unreadCount > 0) {
+                counts[roomId] = unreadCount;
+            }
+        }
+        res.json({ success: true, data: counts });
     }
     catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -295,20 +297,25 @@ const markMessagesRead = async (req, res) => {
             res.status(400).json({ success: false, message: 'UID diperlukan' });
             return;
         }
-        let whereClause = {};
-        if (roomId) {
-            // Grup: tandai semua pesan di room ini yang bukan dari diri sendiri
-            whereClause = { roomId, senderUid: { [sequelize_1.Op.ne]: uid } };
-        }
-        else if (senderUid) {
-            // Personal: tandai pesan dari senderUid yang ditujukan ke uid
-            whereClause = { senderUid, receiverUid: uid };
-        }
-        else {
-            res.status(400).json({ success: false, message: 'roomId atau senderUid diperlukan' });
+        if (roomId && typeof roomId === 'string' && roomId.startsWith('GROUP_')) {
+            // Group chat: perbarui lastReadAt khusus untuk user ini di room ini
+            const id = `grs_${uid}_${roomId}`;
+            await models_1.GroupReadState.upsert({
+                id,
+                userId: uid,
+                roomId,
+                lastReadAt: new Date(),
+            });
+            res.json({ success: true, message: 'Pesan grup ditandai terbaca' });
             return;
         }
-        await models_1.ChatMessage.update({ isRead: true }, { where: whereClause });
+        // Personal chat: tandai pesan dari senderUid yang ditujukan ke receiverUid (uid)
+        if (senderUid) {
+            await models_1.ChatMessage.update({ isRead: true }, { where: { senderUid, receiverUid: uid, isRead: false } });
+        }
+        else if (roomId) {
+            await models_1.ChatMessage.update({ isRead: true }, { where: { roomId, senderUid: { [sequelize_1.Op.ne]: uid }, isRead: false } });
+        }
         res.json({ success: true, message: 'Pesan ditandai terbaca' });
     }
     catch (error) {
