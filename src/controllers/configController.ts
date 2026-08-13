@@ -7,7 +7,7 @@ import { SystemSetting } from '../models';
  */
 export const getAppVersion = async (req: Request, res: Response) => {
   try {
-    const keys = ['latestVersion', 'minVersion', 'forceUpdate', 'updateUrl', 'releaseNotes'];
+    const keys = ['latestVersion', 'minVersion', 'forceUpdate', 'updateUrl', 'releaseNotes', 'showNotification', 'showUpdateNotification'];
     const settings = await SystemSetting.findAll({ where: { key: keys } });
     
     // Convert array to object
@@ -16,6 +16,12 @@ export const getAppVersion = async (req: Request, res: Response) => {
       config[s.key] = s.value;
     });
 
+    const showNotif = config.showNotification !== undefined 
+      ? (config.showNotification === 'true' || config.showNotification === '1')
+      : (config.showUpdateNotification !== undefined 
+          ? (config.showUpdateNotification === 'true' || config.showUpdateNotification === '1') 
+          : true);
+
     // Default values if missing
     const data = {
       latestVersion: config.latestVersion || '1.9.4',
@@ -23,6 +29,8 @@ export const getAppVersion = async (req: Request, res: Response) => {
       forceUpdate: config.forceUpdate === 'true' || config.forceUpdate === '1',
       updateUrl: config.updateUrl || 'https://play.google.com/store/apps/details?id=com.appsbeem.jimpitan',
       releaseNotes: config.releaseNotes || 'Perbaikan bug dan peningkatan performa.',
+      showNotification: showNotif,
+      showUpdateNotification: showNotif,
     };
 
     res.json({
@@ -41,14 +49,18 @@ export const getAppVersion = async (req: Request, res: Response) => {
  */
 export const updateAppVersion = async (req: Request, res: Response) => {
   try {
-    const { latestVersion, minVersion, forceUpdate, updateUrl, releaseNotes } = req.body;
+    const { latestVersion, minVersion, forceUpdate, updateUrl, releaseNotes, showNotification, showUpdateNotification } = req.body;
     
+    const notifVal = showNotification !== undefined ? showNotification : showUpdateNotification;
+
     const updates = [
       { key: 'latestVersion', value: latestVersion },
       { key: 'minVersion', value: minVersion },
-      { key: 'forceUpdate', value: forceUpdate ? 'true' : 'false' },
+      { key: 'forceUpdate', value: forceUpdate !== undefined ? (forceUpdate ? 'true' : 'false') : undefined },
       { key: 'updateUrl', value: updateUrl },
       { key: 'releaseNotes', value: releaseNotes },
+      { key: 'showNotification', value: notifVal !== undefined ? (notifVal ? 'true' : 'false') : undefined },
+      { key: 'showUpdateNotification', value: notifVal !== undefined ? (notifVal ? 'true' : 'false') : undefined },
     ];
 
     for (const item of updates) {
