@@ -151,13 +151,17 @@ export const registerVillage = async (req: Request, res: Response): Promise<void
       config
     }, { transaction });
 
+    const sanitizedEmail = (typeof email === 'string' && email.trim().length > 0)
+      ? email.trim()
+      : null;
+
     // 3. Setup user as ADMIN for the new village
     const [user, created] = await User.findOrCreate({
       where: { uid },
       defaults: {
         uid,
         name: name || 'Admin Desa',
-        email: email || '',
+        email: sanitizedEmail,
         photoUrl: photoUrl || '',
         status: 'ACTIVE',
         villageId
@@ -168,11 +172,14 @@ export const registerVillage = async (req: Request, res: Response): Promise<void
     if (!created) {
       await user.update({
         status: 'ACTIVE',
-        villageId
+        villageId,
+        ...(name ? { name } : {}),
+        ...(sanitizedEmail ? { email: sanitizedEmail } : {})
       }, { transaction });
     }
 
     // Assign Role ADMIN_DESA
+    await Role.destroy({ where: { userId: uid }, transaction });
     await Role.create({
       id: `role_${uid}_ADMIN_DESA_${Date.now()}`,
       name: 'ADMIN_DESA',
@@ -306,8 +313,11 @@ export const saveUserFamily = async (req: Request, res: Response): Promise<void>
     const { familyId, uniqueCode, villageId, noKK, alamat, address, phone, phoneNumber, familyMembers, deletedDocIds } = req.body;
     
     // Process deletes
-    if (deletedDocIds && deletedDocIds.length > 0) {
-      await User.destroy({ where: { uid: deletedDocIds }, transaction });
+    if (deletedDocIds && Array.isArray(deletedDocIds) && deletedDocIds.length > 0) {
+      const validDeletes = deletedDocIds.filter(Boolean);
+      if (validDeletes.length > 0) {
+        await User.destroy({ where: { uid: validDeletes }, transaction });
+      }
     }
 
     const familyNoKK = noKK ?? '';
@@ -315,63 +325,76 @@ export const saveUserFamily = async (req: Request, res: Response): Promise<void>
     const familyPhone = phone ?? phoneNumber ?? '';
 
     // Process upserts
-    for (const member of familyMembers) {
-      const { docId, roles, email, ...userData } = member;
+    if (Array.isArray(familyMembers)) {
+      for (const member of familyMembers) {
+        const { docId, uid, id, _docId, roles, email, ...userData } = member;
 
-      // Sanitize email: convert empty string to null so MySQL unique index won't fail
-      const sanitizedEmail = (typeof email === 'string' && email.trim().length > 0)
-        ? email.trim()
-        : null;
+        const targetDocId = (docId || uid || id || _docId || '').toString().trim() ||
+          (`${Date.now()}_${Math.floor(Math.random() * 1000)}`);
 
-      const sanitizedMemberData = {
-        ...userData,
-        email: sanitizedEmail,
-        noKK: member.noKK ?? familyNoKK,
-        alamat: member.alamat ?? member.address ?? familyAlamat,
-        phoneNumber: member.phoneNumber ?? member.phone ?? familyPhone,
-      };
+        const memberName = (member.name || member.namaLengkap || member.nama || '').toString().trim();
+        const memberNoKK = (member.noKK || familyNoKK || '').toString().trim();
+        const memberAlamat = (member.alamat || member.address || familyAlamat || '').toString().trim();
+        const memberPhone = (member.phoneNumber || member.phone || familyPhone || '').toString().trim();
 
-      const [user, created] = await User.findOrCreate({
-        where: { uid: docId },
-        defaults: {
-          uid: docId,
-          familyId,
-          uniqueCode,
-          villageId,
-          status: 'ACTIVE',
-          ...sanitizedMemberData
-        },
-        transaction
-      });
+        // Sanitize email: convert empty string to null so MySQL unique index won't fail
+        const sanitizedEmail = (typeof email === 'string' && email.trim().length > 0)
+          ? email.trim()
+          : null;
 
-      if (!created) {
-        await user.update({
-          familyId,
-          uniqueCode,
-          villageId,
-          status: 'ACTIVE',
-          ...sanitizedMemberData
-        }, { transaction });
-      }
+        const sanitizedMemberData = {
+          ...userData,
+          name: memberName,
+          email: sanitizedEmail,
+          noKK: memberNoKK,
+          alamat: memberAlamat,
+          phoneNumber: memberPhone,
+        };
 
-      if (userData.createdAt) {
-        (user as any).setDataValue('createdAt', new Date(userData.createdAt as string));
-        (user as any).changed('createdAt', true);
-        await user.save({ transaction });
-      }
+        const [user, created] = await User.findOrCreate({
+          where: { uid: targetDocId },
+          defaults: {
+            uid: targetDocId,
+            familyId: familyId || targetDocId,
+            uniqueCode: uniqueCode || '',
+            villageId: villageId || '',
+            status: 'ACTIVE',
+            ...sanitizedMemberData
+          },
+          transaction
+        });
 
-      // Process roles
-      if (roles && Array.isArray(roles)) {
-        const uniqueRoles = roles.filter((val: any, idx: number, arr: any[]) => arr.indexOf(val) === idx) as string[];
-        await Role.destroy({ where: { userId: docId }, transaction });
-        for (let index = 0; index < uniqueRoles.length; index++) {
-           const roleName = uniqueRoles[index];
-           await Role.create({
-             id: `ur_${docId}_${roleName}_${Date.now()}_${index}`,
-             name: roleName,
-             userId: docId,
-             villageId
-           }, { transaction });
+        if (!created) {
+          await user.update({
+            familyId: familyId || targetDocId,
+            uniqueCode: uniqueCode || user.getDataValue('uniqueCode'),
+            villageId: villageId || user.getDataValue('villageId'),
+            status: 'ACTIVE',
+            ...sanitizedMemberData
+          }, { transaction });
+        }
+
+        if (userData.createdAt) {
+          (user as any).setDataValue('createdAt', new Date(userData.createdAt as string));
+          (user as any).changed('createdAt', true);
+          await user.save({ transaction });
+        }
+
+        // Process roles
+        if (roles && Array.isArray(roles)) {
+          const stringRoles = roles.map((r: any) => (typeof r === 'string' ? r : (r?.name || r?.id || 'WARGA'))).filter(Boolean);
+          const uniqueRoles = Array.from(new Set(stringRoles));
+
+          await Role.destroy({ where: { userId: targetDocId }, transaction });
+          for (let index = 0; index < uniqueRoles.length; index++) {
+             const roleName = uniqueRoles[index];
+             await Role.create({
+               id: `ur_${targetDocId}_${roleName}_${Date.now()}_${index}`,
+               name: roleName,
+               userId: targetDocId,
+               villageId: villageId || user.getDataValue('villageId')
+             }, { transaction });
+          }
         }
       }
     }
@@ -433,20 +456,44 @@ export const updateUserStatus = async (req: Request, res: Response): Promise<voi
     const { uid } = req.params;
     const { status, villageId } = req.body;
     
-    const user = await User.findByPk(uid as string);
-    if (!user) {
+    const users = await User.findAll({
+      where: {
+        [Op.or]: [
+          { uid: uid },
+          { familyId: uid }
+        ]
+      }
+    });
+
+    if (!users || users.length === 0) {
       res.status(404).json({ success: false, message: 'User not found' });
       return;
     }
     
-    await user.update({ status, villageId });
+    const updateData: any = { status };
+    if (villageId) updateData.villageId = villageId;
+
+    const primaryFamilyId = users[0].getDataValue('familyId');
+    await User.update(updateData, {
+      where: {
+        [Op.or]: [
+          { uid: uid },
+          { familyId: uid },
+          ...(primaryFamilyId ? [{ familyId: primaryFamilyId }] : [])
+        ]
+      }
+    });
+
+    const targetVillageId = villageId || users[0].getDataValue('villageId') || 'all';
+
     try {
       const { firebaseService } = require('../services/firebaseService');
-      firebaseService.sendSyncNotification(villageId || user.getDataValue('villageId') || 'all', 'REFRESH_USERS');
+      firebaseService.sendSyncNotification(targetVillageId, 'REFRESH_USERS');
     } catch (e) {
       console.error('Failed to send sync notification:', e);
     }
-    res.json({ success: true, data: user });
+
+    res.json({ success: true, message: 'User status updated successfully' });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -791,8 +838,21 @@ export const bulkImportUsers = async (req: Request, res: Response): Promise<void
             rawEmail = '';
         }
 
-        // Atasi error Duplicate Entry jika email kosong (karena email bersifat unique dan notNull di DB)
-        const finalEmail = (rawEmail !== '') ? rawEmail : `dummy_${docId}@noemail.com`;
+        // Atasi error Duplicate Entry jika email kosong (karena email bersifat unique di DB)
+        const sanitizedEmail = (typeof rawEmail === 'string' && rawEmail.trim().length > 0 && rawEmail.includes('@'))
+          ? rawEmail.trim()
+          : null;
+
+        const memberName = (member.name || member.namaLengkap || member.nama || 'Warga').toString().trim();
+        const statusKawin = member.statusPerkawinan || member.status_perkawinan || 'Belum Kawin';
+
+        const sanitizedMemberData = {
+          ...userData,
+          name: memberName,
+          email: sanitizedEmail,
+          statusPerkawinan: statusKawin,
+          statusHidup: (member.statusHidup === 'Hidup' ? 'Aktif' : (member.statusHidup || 'Aktif')),
+        };
 
         const [user, created] = await User.findOrCreate({
           where: { uid: docId },
@@ -801,8 +861,7 @@ export const bulkImportUsers = async (req: Request, res: Response): Promise<void
             familyId,
             villageId,
             status: 'ACTIVE',
-            email: finalEmail,
-            ...userData
+            ...sanitizedMemberData
           },
           transaction
         });
@@ -812,8 +871,7 @@ export const bulkImportUsers = async (req: Request, res: Response): Promise<void
             familyId,
             villageId,
             status: 'ACTIVE',
-            email: finalEmail,
-            ...userData
+            ...sanitizedMemberData
           }, { transaction });
         }
 
@@ -824,18 +882,19 @@ export const bulkImportUsers = async (req: Request, res: Response): Promise<void
         }
 
         // Process roles
-        if (roles && Array.isArray(roles)) {
-          const uniqueRoles = roles.filter((val: any, idx: number, arr: any[]) => arr.indexOf(val) === idx) as string[];
-          await Role.destroy({ where: { userId: docId }, transaction });
-          for (let index = 0; index < uniqueRoles.length; index++) {
-             const roleName = uniqueRoles[index];
-             await Role.create({
-               id: `ur_${docId}_${roleName}_${Date.now()}_${index}`,
-               userId: docId,
-               name: roleName,
-               villageId
-             }, { transaction });
-          }
+        const rawRoles = (roles && Array.isArray(roles) && roles.length > 0) ? roles : ['WARGA'];
+        const stringRoles = rawRoles.map((r: any) => (typeof r === 'string' ? r : (r?.name || r?.id || 'WARGA'))).filter(Boolean);
+        const uniqueRoles = Array.from(new Set(stringRoles));
+
+        await Role.destroy({ where: { userId: docId }, transaction });
+        for (let index = 0; index < uniqueRoles.length; index++) {
+           const roleName = uniqueRoles[index];
+           await Role.create({
+             id: `ur_${docId}_${roleName}_${Date.now()}_${index}`,
+             userId: docId,
+             name: roleName,
+             villageId
+           }, { transaction });
         }
       }
     }

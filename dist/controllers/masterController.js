@@ -147,13 +147,16 @@ const registerVillage = async (req, res) => {
             uniqueCode: villageCode,
             config
         }, { transaction });
+        const sanitizedEmail = (typeof email === 'string' && email.trim().length > 0)
+            ? email.trim()
+            : null;
         // 3. Setup user as ADMIN for the new village
         const [user, created] = await models_1.User.findOrCreate({
             where: { uid },
             defaults: {
                 uid,
                 name: name || 'Admin Desa',
-                email: email || '',
+                email: sanitizedEmail,
                 photoUrl: photoUrl || '',
                 status: 'ACTIVE',
                 villageId
@@ -163,10 +166,13 @@ const registerVillage = async (req, res) => {
         if (!created) {
             await user.update({
                 status: 'ACTIVE',
-                villageId
+                villageId,
+                ...(name ? { name } : {}),
+                ...(sanitizedEmail ? { email: sanitizedEmail } : {})
             }, { transaction });
         }
         // Assign Role ADMIN_DESA
+        await models_1.Role.destroy({ where: { userId: uid }, transaction });
         await models_1.Role.create({
             id: `role_${uid}_ADMIN_DESA_${Date.now()}`,
             name: 'ADMIN_DESA',
@@ -294,64 +300,77 @@ const saveUserFamily = async (req, res) => {
     try {
         const { familyId, uniqueCode, villageId, noKK, alamat, address, phone, phoneNumber, familyMembers, deletedDocIds } = req.body;
         // Process deletes
-        if (deletedDocIds && deletedDocIds.length > 0) {
-            await models_1.User.destroy({ where: { uid: deletedDocIds }, transaction });
+        if (deletedDocIds && Array.isArray(deletedDocIds) && deletedDocIds.length > 0) {
+            const validDeletes = deletedDocIds.filter(Boolean);
+            if (validDeletes.length > 0) {
+                await models_1.User.destroy({ where: { uid: validDeletes }, transaction });
+            }
         }
         const familyNoKK = noKK ?? '';
         const familyAlamat = alamat ?? address ?? '';
         const familyPhone = phone ?? phoneNumber ?? '';
         // Process upserts
-        for (const member of familyMembers) {
-            const { docId, roles, email, ...userData } = member;
-            // Sanitize email: convert empty string to null so MySQL unique index won't fail
-            const sanitizedEmail = (typeof email === 'string' && email.trim().length > 0)
-                ? email.trim()
-                : null;
-            const sanitizedMemberData = {
-                ...userData,
-                email: sanitizedEmail,
-                noKK: member.noKK ?? familyNoKK,
-                alamat: member.alamat ?? member.address ?? familyAlamat,
-                phoneNumber: member.phoneNumber ?? member.phone ?? familyPhone,
-            };
-            const [user, created] = await models_1.User.findOrCreate({
-                where: { uid: docId },
-                defaults: {
-                    uid: docId,
-                    familyId,
-                    uniqueCode,
-                    villageId,
-                    status: 'ACTIVE',
-                    ...sanitizedMemberData
-                },
-                transaction
-            });
-            if (!created) {
-                await user.update({
-                    familyId,
-                    uniqueCode,
-                    villageId,
-                    status: 'ACTIVE',
-                    ...sanitizedMemberData
-                }, { transaction });
-            }
-            if (userData.createdAt) {
-                user.setDataValue('createdAt', new Date(userData.createdAt));
-                user.changed('createdAt', true);
-                await user.save({ transaction });
-            }
-            // Process roles
-            if (roles && Array.isArray(roles)) {
-                const uniqueRoles = roles.filter((val, idx, arr) => arr.indexOf(val) === idx);
-                await models_1.Role.destroy({ where: { userId: docId }, transaction });
-                for (let index = 0; index < uniqueRoles.length; index++) {
-                    const roleName = uniqueRoles[index];
-                    await models_1.Role.create({
-                        id: `ur_${docId}_${roleName}_${Date.now()}_${index}`,
-                        name: roleName,
-                        userId: docId,
-                        villageId
+        if (Array.isArray(familyMembers)) {
+            for (const member of familyMembers) {
+                const { docId, uid, id, _docId, roles, email, ...userData } = member;
+                const targetDocId = (docId || uid || id || _docId || '').toString().trim() ||
+                    (`${Date.now()}_${Math.floor(Math.random() * 1000)}`);
+                const memberName = (member.name || member.namaLengkap || member.nama || '').toString().trim();
+                const memberNoKK = (member.noKK || familyNoKK || '').toString().trim();
+                const memberAlamat = (member.alamat || member.address || familyAlamat || '').toString().trim();
+                const memberPhone = (member.phoneNumber || member.phone || familyPhone || '').toString().trim();
+                // Sanitize email: convert empty string to null so MySQL unique index won't fail
+                const sanitizedEmail = (typeof email === 'string' && email.trim().length > 0)
+                    ? email.trim()
+                    : null;
+                const sanitizedMemberData = {
+                    ...userData,
+                    name: memberName,
+                    email: sanitizedEmail,
+                    noKK: memberNoKK,
+                    alamat: memberAlamat,
+                    phoneNumber: memberPhone,
+                };
+                const [user, created] = await models_1.User.findOrCreate({
+                    where: { uid: targetDocId },
+                    defaults: {
+                        uid: targetDocId,
+                        familyId: familyId || targetDocId,
+                        uniqueCode: uniqueCode || '',
+                        villageId: villageId || '',
+                        status: 'ACTIVE',
+                        ...sanitizedMemberData
+                    },
+                    transaction
+                });
+                if (!created) {
+                    await user.update({
+                        familyId: familyId || targetDocId,
+                        uniqueCode: uniqueCode || user.getDataValue('uniqueCode'),
+                        villageId: villageId || user.getDataValue('villageId'),
+                        status: 'ACTIVE',
+                        ...sanitizedMemberData
                     }, { transaction });
+                }
+                if (userData.createdAt) {
+                    user.setDataValue('createdAt', new Date(userData.createdAt));
+                    user.changed('createdAt', true);
+                    await user.save({ transaction });
+                }
+                // Process roles
+                if (roles && Array.isArray(roles)) {
+                    const stringRoles = roles.map((r) => (typeof r === 'string' ? r : (r?.name || r?.id || 'WARGA'))).filter(Boolean);
+                    const uniqueRoles = Array.from(new Set(stringRoles));
+                    await models_1.Role.destroy({ where: { userId: targetDocId }, transaction });
+                    for (let index = 0; index < uniqueRoles.length; index++) {
+                        const roleName = uniqueRoles[index];
+                        await models_1.Role.create({
+                            id: `ur_${targetDocId}_${roleName}_${Date.now()}_${index}`,
+                            name: roleName,
+                            userId: targetDocId,
+                            villageId: villageId || user.getDataValue('villageId')
+                        }, { transaction });
+                    }
                 }
             }
         }
@@ -414,20 +433,40 @@ const updateUserStatus = async (req, res) => {
     try {
         const { uid } = req.params;
         const { status, villageId } = req.body;
-        const user = await models_1.User.findByPk(uid);
-        if (!user) {
+        const users = await models_1.User.findAll({
+            where: {
+                [sequelize_1.Op.or]: [
+                    { uid: uid },
+                    { familyId: uid }
+                ]
+            }
+        });
+        if (!users || users.length === 0) {
             res.status(404).json({ success: false, message: 'User not found' });
             return;
         }
-        await user.update({ status, villageId });
+        const updateData = { status };
+        if (villageId)
+            updateData.villageId = villageId;
+        const primaryFamilyId = users[0].getDataValue('familyId');
+        await models_1.User.update(updateData, {
+            where: {
+                [sequelize_1.Op.or]: [
+                    { uid: uid },
+                    { familyId: uid },
+                    ...(primaryFamilyId ? [{ familyId: primaryFamilyId }] : [])
+                ]
+            }
+        });
+        const targetVillageId = villageId || users[0].getDataValue('villageId') || 'all';
         try {
             const { firebaseService } = require('../services/firebaseService');
-            firebaseService.sendSyncNotification(villageId || user.getDataValue('villageId') || 'all', 'REFRESH_USERS');
+            firebaseService.sendSyncNotification(targetVillageId, 'REFRESH_USERS');
         }
         catch (e) {
             console.error('Failed to send sync notification:', e);
         }
-        res.json({ success: true, data: user });
+        res.json({ success: true, message: 'User status updated successfully' });
     }
     catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -756,8 +795,19 @@ const bulkImportUsers = async (req, res) => {
                 if (rawEmail === '-' || rawEmail.toLowerCase() === 'kosong' || rawEmail === '.') {
                     rawEmail = '';
                 }
-                // Atasi error Duplicate Entry jika email kosong (karena email bersifat unique dan notNull di DB)
-                const finalEmail = (rawEmail !== '') ? rawEmail : `dummy_${docId}@noemail.com`;
+                // Atasi error Duplicate Entry jika email kosong (karena email bersifat unique di DB)
+                const sanitizedEmail = (typeof rawEmail === 'string' && rawEmail.trim().length > 0 && rawEmail.includes('@'))
+                    ? rawEmail.trim()
+                    : null;
+                const memberName = (member.name || member.namaLengkap || member.nama || 'Warga').toString().trim();
+                const statusKawin = member.statusPerkawinan || member.status_perkawinan || 'Belum Kawin';
+                const sanitizedMemberData = {
+                    ...userData,
+                    name: memberName,
+                    email: sanitizedEmail,
+                    statusPerkawinan: statusKawin,
+                    statusHidup: (member.statusHidup === 'Hidup' ? 'Aktif' : (member.statusHidup || 'Aktif')),
+                };
                 const [user, created] = await models_1.User.findOrCreate({
                     where: { uid: docId },
                     defaults: {
@@ -765,8 +815,7 @@ const bulkImportUsers = async (req, res) => {
                         familyId,
                         villageId,
                         status: 'ACTIVE',
-                        email: finalEmail,
-                        ...userData
+                        ...sanitizedMemberData
                     },
                     transaction
                 });
@@ -775,8 +824,7 @@ const bulkImportUsers = async (req, res) => {
                         familyId,
                         villageId,
                         status: 'ACTIVE',
-                        email: finalEmail,
-                        ...userData
+                        ...sanitizedMemberData
                     }, { transaction });
                 }
                 if (userData.createdAt) {
@@ -785,18 +833,18 @@ const bulkImportUsers = async (req, res) => {
                     await user.save({ transaction });
                 }
                 // Process roles
-                if (roles && Array.isArray(roles)) {
-                    const uniqueRoles = roles.filter((val, idx, arr) => arr.indexOf(val) === idx);
-                    await models_1.Role.destroy({ where: { userId: docId }, transaction });
-                    for (let index = 0; index < uniqueRoles.length; index++) {
-                        const roleName = uniqueRoles[index];
-                        await models_1.Role.create({
-                            id: `ur_${docId}_${roleName}_${Date.now()}_${index}`,
-                            userId: docId,
-                            name: roleName,
-                            villageId
-                        }, { transaction });
-                    }
+                const rawRoles = (roles && Array.isArray(roles) && roles.length > 0) ? roles : ['WARGA'];
+                const stringRoles = rawRoles.map((r) => (typeof r === 'string' ? r : (r?.name || r?.id || 'WARGA'))).filter(Boolean);
+                const uniqueRoles = Array.from(new Set(stringRoles));
+                await models_1.Role.destroy({ where: { userId: docId }, transaction });
+                for (let index = 0; index < uniqueRoles.length; index++) {
+                    const roleName = uniqueRoles[index];
+                    await models_1.Role.create({
+                        id: `ur_${docId}_${roleName}_${Date.now()}_${index}`,
+                        userId: docId,
+                        name: roleName,
+                        villageId
+                    }, { transaction });
                 }
             }
         }
