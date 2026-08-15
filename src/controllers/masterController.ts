@@ -299,8 +299,12 @@ export const deleteUserFamily = async (req: Request, res: Response): Promise<voi
         ]
       }
     });
-    const { firebaseService } = require('../services/firebaseService');
-    firebaseService.sendSyncNotification(req.body.villageId || 'all', 'REFRESH_USERS');
+    const firebaseService = require('../services/firebaseService');
+    try {
+      firebaseService.sendSyncNotification(req.body.villageId || 'all', 'REFRESH_USERS');
+    } catch (e) {
+      console.error('Failed to send sync notification:', e);
+    }
     res.json({ success: true, message: 'Family or user deleted' });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
@@ -487,7 +491,7 @@ export const updateUserStatus = async (req: Request, res: Response): Promise<voi
     const targetVillageId = villageId || users[0].getDataValue('villageId') || 'all';
 
     try {
-      const { firebaseService } = require('../services/firebaseService');
+      const firebaseService = require('../services/firebaseService');
       firebaseService.sendSyncNotification(targetVillageId, 'REFRESH_USERS');
     } catch (e) {
       console.error('Failed to send sync notification:', e);
@@ -535,7 +539,7 @@ export const updateUserRoles = async (req: Request, res: Response): Promise<void
     await transaction.commit();
     
     try {
-      const { firebaseService } = require('../services/firebaseService');
+      const firebaseService = require('../services/firebaseService');
       firebaseService.sendSyncNotification(villageId || user.getDataValue('villageId') || 'all', 'REFRESH_USERS');
     } catch (e) {
       console.error('Failed to send sync notification:', e);
@@ -650,7 +654,7 @@ export const linkUserAccount = async (req: Request, res: Response): Promise<void
     await transaction.commit();
 
     try {
-      const { firebaseService } = require('../services/firebaseService');
+      const firebaseService = require('../services/firebaseService');
       firebaseService.sendSyncNotification(villageIdVal || 'all', 'REFRESH_USERS');
     } catch (e) {
       console.error('Failed to send sync notification:', e);

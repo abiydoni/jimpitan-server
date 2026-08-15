@@ -52,6 +52,10 @@ export const sendSyncNotification = async (villageId: string, action: string) =>
       },
     };
 
+    if (!messagingInstance) {
+      console.warn('⚠️  FCM Messaging instance tidak tersedia, sinkronisasi dibatalkan.');
+      return;
+    }
     const response = await messagingInstance.send(message);
     console.log(`📡 FCM Sync [${action}] berhasil dikirim ke topic ${topic} (Message ID: ${response})`);
   } catch (error) {
@@ -137,6 +141,10 @@ export const sendChatNotification = async (
       },
     };
 
+    if (!messagingInstance) {
+      console.warn('⚠️  FCM Messaging instance tidak tersedia, notifikasi chat dibatalkan.');
+      return;
+    }
     const response = await messagingInstance.send(message);
     console.log(`💬 FCM Chat [${senderName}] → penerima (Message ID: ${response})`);
   } catch (error: any) {

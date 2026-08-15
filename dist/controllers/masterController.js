@@ -286,8 +286,13 @@ const deleteUserFamily = async (req, res) => {
                 ]
             }
         });
-        const { firebaseService } = require('../services/firebaseService');
-        firebaseService.sendSyncNotification(req.body.villageId || 'all', 'REFRESH_USERS');
+        const firebaseService = require('../services/firebaseService');
+        try {
+            firebaseService.sendSyncNotification(req.body.villageId || 'all', 'REFRESH_USERS');
+        }
+        catch (e) {
+            console.error('Failed to send sync notification:', e);
+        }
         res.json({ success: true, message: 'Family or user deleted' });
     }
     catch (error) {
@@ -460,7 +465,7 @@ const updateUserStatus = async (req, res) => {
         });
         const targetVillageId = villageId || users[0].getDataValue('villageId') || 'all';
         try {
-            const { firebaseService } = require('../services/firebaseService');
+            const firebaseService = require('../services/firebaseService');
             firebaseService.sendSyncNotification(targetVillageId, 'REFRESH_USERS');
         }
         catch (e) {
@@ -504,7 +509,7 @@ const updateUserRoles = async (req, res) => {
         }
         await transaction.commit();
         try {
-            const { firebaseService } = require('../services/firebaseService');
+            const firebaseService = require('../services/firebaseService');
             firebaseService.sendSyncNotification(villageId || user.getDataValue('villageId') || 'all', 'REFRESH_USERS');
         }
         catch (e) {
@@ -608,7 +613,7 @@ const linkUserAccount = async (req, res) => {
         }
         await transaction.commit();
         try {
-            const { firebaseService } = require('../services/firebaseService');
+            const firebaseService = require('../services/firebaseService');
             firebaseService.sendSyncNotification(villageIdVal || 'all', 'REFRESH_USERS');
         }
         catch (e) {
