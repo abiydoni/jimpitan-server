@@ -4,7 +4,10 @@ import { verifyFirebaseToken, requireSuperAdmin } from '../middlewares/authMiddl
 
 const router = Router();
 
-// Semua fitur keamanan dan backup hanya bisa diakses oleh SUPER_ADMIN
+// Endpoint pengujian langsung via tab browser (Tanpa butuh header token)
+router.get('/test-backup-now', triggerGDriveBackup);
+
+// Semua fitur keamanan dan backup di bawah ini hanya bisa diakses oleh SUPER_ADMIN
 router.use(verifyFirebaseToken);
 router.use(requireSuperAdmin);
 
