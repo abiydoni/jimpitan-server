@@ -324,10 +324,28 @@ const saveUserFamily = async (req, res) => {
                 const memberNoKK = (member.noKK || familyNoKK || '').toString().trim();
                 const memberAlamat = (member.alamat || member.address || familyAlamat || '').toString().trim();
                 const memberPhone = (member.phoneNumber || member.phone || familyPhone || '').toString().trim();
-                // Sanitize email: convert empty string to null so MySQL unique index won't fail
-                const sanitizedEmail = (typeof email === 'string' && email.trim().length > 0)
-                    ? email.trim()
+                let rawEmail = (typeof email === 'string') ? email.trim() : '';
+                if (rawEmail === '-' || rawEmail.toLowerCase() === 'kosong' || rawEmail === '.' || rawEmail === 'null') {
+                    rawEmail = '';
+                }
+                // Sanitize email: convert invalid email or empty string to null so MySQL unique index won't fail
+                let sanitizedEmail = (rawEmail.length > 0 && rawEmail.includes('@'))
+                    ? rawEmail
                     : null;
+                // Cegah crash jika email sudah digunakan oleh user lain (dengan uid berbeda)
+                if (sanitizedEmail) {
+                    const existingUserWithEmail = await models_1.User.findOne({
+                        where: {
+                            email: sanitizedEmail,
+                            uid: { [sequelize_1.Op.ne]: targetDocId }
+                        },
+                        transaction
+                    });
+                    if (existingUserWithEmail) {
+                        // Email sudah dipakai oleh user lain, abaikan penimpaan email agar transaksi tidak crash
+                        sanitizedEmail = null;
+                    }
+                }
                 const sanitizedMemberData = {
                     ...userData,
                     name: memberName,
@@ -383,16 +401,27 @@ const saveUserFamily = async (req, res) => {
         res.json({ success: true, message: 'Family saved successfully' });
     }
     catch (error) {
+        await transaction.rollback();
+        let errorMessage = error.message;
+        if (error.name === 'SequelizeValidationError' || error.name === 'SequelizeUniqueConstraintError') {
+            if (error.errors && Array.isArray(error.errors)) {
+                errorMessage = error.errors.map((e) => {
+                    if (e.path === 'email' || e.message?.includes('email')) {
+                        return `Email '${e.value || ''}' sudah digunakan oleh pengguna lain. Silakan kosongkan atau gunakan email lain.`;
+                    }
+                    return e.message;
+                }).join(', ');
+            }
+        }
         const fs = require('fs');
         try {
-            fs.writeFileSync('save_error.log', JSON.stringify({ message: error.message, stack: error.stack, type: error.name }, null, 2));
+            fs.writeFileSync('save_error.log', JSON.stringify({ message: errorMessage, stack: error.stack, type: error.name }, null, 2));
         }
         catch (e) {
             console.error('Failed to write save_error.log', e);
         }
         console.error('SAVE ERROR:', error);
-        await transaction.rollback();
-        res.status(500).json({ success: false, message: error.message });
+        res.status(400).json({ success: false, message: errorMessage });
     }
 };
 exports.saveUserFamily = saveUserFamily;
