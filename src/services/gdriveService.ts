@@ -1,15 +1,19 @@
 import { google } from 'googleapis';
 import fs from 'fs';
 import path from 'path';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const getDriveService = () => {
-  const clientId = process.env.GDRIVE_CLIENT_ID;
-  const clientSecret = process.env.GDRIVE_CLIENT_SECRET;
-  const refreshToken = process.env.GDRIVE_REFRESH_TOKEN;
+  const clientId = process.env.GDRIVE_CLIENT_ID?.trim();
+  const clientSecret = process.env.GDRIVE_CLIENT_SECRET?.trim();
+  const refreshToken = process.env.GDRIVE_REFRESH_TOKEN?.trim();
 
-  // Hanya gunakan OAuth2 jika credentials valid (bukan placeholder 'xxx')
-  const isValidOAuth = clientId && clientSecret && refreshToken &&
-    !clientId.includes('xxx') && !clientSecret.includes('xxx') && !refreshToken.includes('xxx');
+  // Hanya gunakan OAuth2 jika credentials valid (bukan placeholder 'xxx' dan tidak kosong)
+  const isValidOAuth = !!(clientId && clientSecret && refreshToken &&
+    clientId.length > 10 && clientSecret.length > 5 && refreshToken.length > 5 &&
+    !clientId.includes('xxx') && !clientSecret.includes('xxx') && !refreshToken.includes('xxx'));
 
   if (isValidOAuth) {
     const oauth2Client = new google.auth.OAuth2(
@@ -25,7 +29,7 @@ const getDriveService = () => {
   const keyPath = path.resolve(__dirname, '../../serviceAccountKey.json');
   
   if (!fs.existsSync(keyPath)) {
-    throw new Error('File serviceAccountKey.json tidak ditemukan.');
+    throw new Error('File serviceAccountKey.json tidak ditemukan dan OAuth2 credentials belum di-set di .env.');
   }
 
   const auth = new google.auth.GoogleAuth({
