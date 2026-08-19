@@ -23,30 +23,30 @@ import { SubscriptionPlan, VillageSubscription, Invoice } from './SaaS';
 // 2. Model User
 // ---------------------------
 export class User extends Model {
-  public uid!: string;
-  public name!: string;
-  public email!: string;
-  public photoUrl!: string | null;
-  public foto!: string | null;
-  public phoneNumber!: string | null;
-  public agama!: string | null;
-  public pekerjaan!: string | null;
-  public status!: string;
-  public villageId!: string | null;
-  public familyId!: string | null;
-  public nik!: string | null;
-  public noKK!: string | null;
-  public jenisKelamin!: string | null;
-  public tempatLahir!: string | null;
-  public tanggalLahir!: string | null;
-  public statusHubungan!: string | null;
-  public statusPerkawinan!: string | null;
-  public statusHidup!: string | null;
-  public alamat!: string | null;
-  public uniqueCode!: string | null;
-  public fcmToken!: string | null;
-  public isOnline!: boolean;
-  public lastSeen!: Date | null;
+  declare uid: string;
+  declare name: string;
+  declare email: string | null;
+  declare photoUrl: string | null;
+  declare foto: string | null;
+  declare phoneNumber: string | null;
+  declare agama: string | null;
+  declare pekerjaan: string | null;
+  declare status: string;
+  declare villageId: string | null;
+  declare familyId: string | null;
+  declare nik: string | null;
+  declare noKK: string | null;
+  declare jenisKelamin: string | null;
+  declare tempatLahir: string | null;
+  declare tanggalLahir: string | null;
+  declare statusHubungan: string | null;
+  declare statusPerkawinan: string | null;
+  declare statusHidup: string | null;
+  declare alamat: string | null;
+  declare uniqueCode: string | null;
+  declare fcmToken: string | null;
+  declare isOnline: boolean;
+  declare lastSeen: Date | null;
 }
 User.init({
   uid: { type: DataTypes.STRING(128), primaryKey: true },
@@ -116,20 +116,20 @@ Menu.init({
 // 4. Model ChatMessage
 // ---------------------------
 export class ChatMessage extends Model {
-  public id!: string;
-  public roomId!: string | null;
-  public senderUid!: string;
-  public senderName!: string | null;
-  public receiverUid!: string | null;
-  public message!: string;
-  public isRead!: boolean;
-  public isDeleted!: boolean;
-  public isEdited!: boolean;
-  public villageId!: string;
-  public replyToId!: string | null;
-  public replyToMessage!: string | null;
-  public replyToSenderName!: string | null;
-  public isForwarded!: boolean;
+  declare id: string;
+  declare roomId: string | null;
+  declare senderUid: string;
+  declare senderName: string | null;
+  declare receiverUid: string | null;
+  declare message: string;
+  declare isRead: boolean;
+  declare isDeleted: boolean;
+  declare isEdited: boolean;
+  declare villageId: string;
+  declare replyToId: string | null;
+  declare replyToMessage: string | null;
+  declare replyToSenderName: string | null;
+  declare isForwarded: boolean;
 }
 ChatMessage.init({
   id: { type: DataTypes.STRING(128), primaryKey: true },
@@ -152,10 +152,10 @@ ChatMessage.init({
 // 4b. Model GroupReadState
 // ---------------------------
 export class GroupReadState extends Model {
-  public id!: string;
-  public userId!: string;
-  public roomId!: string;
-  public lastReadAt!: Date;
+  declare id: string;
+  declare userId: string;
+  declare roomId: string;
+  declare lastReadAt: Date;
 }
 GroupReadState.init({
   id: { type: DataTypes.STRING(255), primaryKey: true },

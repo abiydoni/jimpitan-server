@@ -40,30 +40,6 @@ const SaaS_1 = require("./SaaS");
 // 2. Model User
 // ---------------------------
 class User extends sequelize_1.Model {
-    uid;
-    name;
-    email;
-    photoUrl;
-    foto;
-    phoneNumber;
-    agama;
-    pekerjaan;
-    status;
-    villageId;
-    familyId;
-    nik;
-    noKK;
-    jenisKelamin;
-    tempatLahir;
-    tanggalLahir;
-    statusHubungan;
-    statusPerkawinan;
-    statusHidup;
-    alamat;
-    uniqueCode;
-    fcmToken;
-    isOnline;
-    lastSeen;
 }
 exports.User = User;
 User.init({
@@ -136,20 +112,6 @@ Menu.init({
 // 4. Model ChatMessage
 // ---------------------------
 class ChatMessage extends sequelize_1.Model {
-    id;
-    roomId;
-    senderUid;
-    senderName;
-    receiverUid;
-    message;
-    isRead;
-    isDeleted;
-    isEdited;
-    villageId;
-    replyToId;
-    replyToMessage;
-    replyToSenderName;
-    isForwarded;
 }
 exports.ChatMessage = ChatMessage;
 ChatMessage.init({
@@ -172,10 +134,6 @@ ChatMessage.init({
 // 4b. Model GroupReadState
 // ---------------------------
 class GroupReadState extends sequelize_1.Model {
-    id;
-    userId;
-    roomId;
-    lastReadAt;
 }
 exports.GroupReadState = GroupReadState;
 GroupReadState.init({
