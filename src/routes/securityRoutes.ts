@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { backupDatabase, clearSystemCache } from '../controllers/securityController';
+import { backupDatabase, clearSystemCache, triggerGDriveBackup } from '../controllers/securityController';
 import { verifyFirebaseToken, requireSuperAdmin } from '../middlewares/authMiddleware';
 
 const router = Router();
@@ -9,6 +9,7 @@ router.use(verifyFirebaseToken);
 router.use(requireSuperAdmin);
 
 router.get('/backup', backupDatabase);
+router.get('/backup-gdrive', triggerGDriveBackup);
 router.post('/clear-logs', clearSystemCache);
 
 export default router;

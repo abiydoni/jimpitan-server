@@ -8,5 +8,6 @@ const router = (0, express_1.Router)();
 router.use(authMiddleware_1.verifyFirebaseToken);
 router.use(authMiddleware_1.requireSuperAdmin);
 router.get('/backup', securityController_1.backupDatabase);
+router.get('/backup-gdrive', securityController_1.triggerGDriveBackup);
 router.post('/clear-logs', securityController_1.clearSystemCache);
 exports.default = router;
