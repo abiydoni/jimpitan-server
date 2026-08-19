@@ -33,13 +33,26 @@ const getCpuUsage = () => {
     return usage;
 };
 
+// Helper format angka Indonesia dengan pemisah ribuan titik dan desimal koma
+const formatNumberId = (num: number, decimals: number = 2): string => {
+    return num.toLocaleString('id-ID', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
+    });
+};
+
 export const getStats = async (req: Request, res: Response): Promise<void> => {
     try {
-        // Memory
+        // 1. RAM Aplikasi Node.js (RSS - Resident Set Size)
+        const appMemory = process.memoryUsage();
+        const appRssMb = appMemory.rss / (1024 * 1024);
+        const appHeapUsedMb = appMemory.heapUsed / (1024 * 1024);
+
+        // 2. RAM Total Server Linux cPanel
         const totalMem = os.totalmem();
         const freeMem = os.freemem();
-        const usedMem = totalMem - freeMem;
-        const memoryUsagePercent = Math.floor((usedMem / totalMem) * 100);
+        const systemUsedMem = totalMem - freeMem;
+        const memoryUsagePercent = Math.floor((systemUsedMem / totalMem) * 100);
 
         // Uptime
         const uptimeSeconds = process.uptime();
@@ -61,12 +74,19 @@ export const getStats = async (req: Request, res: Response): Promise<void> => {
             data: {
                 cpuUsage: getCpuUsage(),
                 memoryUsagePercent,
-                usedMemMb: (usedMem / 1024 / 1024).toFixed(2),
-                totalMemMb: (totalMem / 1024 / 1024).toFixed(2),
+                // RAM Aplikasi Node.js (Real-time RAM proses ini)
+                appRssMbFormatted: formatNumberId(appRssMb, 2),
+                appHeapUsedMbFormatted: formatNumberId(appHeapUsedMb, 2),
+                // RAM Sistem Server cPanel
+                systemUsedMemMbFormatted: formatNumberId(systemUsedMem / (1024 * 1024), 2),
+                systemTotalMemMbFormatted: formatNumberId(totalMem / (1024 * 1024), 2),
+                // Backward compatibility
+                usedMemMb: formatNumberId(appRssMb, 2),
+                totalMemMb: formatNumberId(totalMem / (1024 * 1024), 2),
                 uptime: uptimeFormatted,
                 platform: os.platform(),
                 dbStatus,
-                fcmStatus: 'ONLINE' // Assuming FCM is online if app starts
+                fcmStatus: 'ONLINE'
             }
         });
     } catch (error: any) {
