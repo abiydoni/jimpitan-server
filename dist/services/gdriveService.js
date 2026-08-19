@@ -18,7 +18,7 @@ const getDriveService = () => {
     }
     const auth = new googleapis_1.google.auth.GoogleAuth({
         keyFile: keyPath,
-        scopes: ['https://www.googleapis.com/auth/drive.file'],
+        scopes: ['https://www.googleapis.com/auth/drive'],
     });
     return googleapis_1.google.drive({ version: 'v3', auth });
 };
@@ -29,6 +29,8 @@ const getOrCreateFolder = async (folderName, parentFolderId) => {
             q: `mimeType='application/vnd.google-apps.folder' and name='${folderName}' and '${parentFolderId}' in parents and trashed=false`,
             fields: 'files(id, name)',
             spaces: 'drive',
+            supportsAllDrives: true,
+            includeItemsFromAllDrives: true,
         });
         if (res.data.files && res.data.files.length > 0) {
             return res.data.files[0].id;
@@ -41,6 +43,7 @@ const getOrCreateFolder = async (folderName, parentFolderId) => {
         const folderRes = await drive.files.create({
             requestBody: fileMetadata,
             fields: 'id',
+            supportsAllDrives: true,
         });
         return folderRes.data.id;
     }
@@ -76,6 +79,7 @@ const uploadFileToDrive = async (filePath, folderId, customFileName) => {
             requestBody: fileMetadata,
             media: media,
             fields: 'id, name, webViewLink',
+            supportsAllDrives: true,
         });
         return response.data;
     }
