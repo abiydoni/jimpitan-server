@@ -11,16 +11,18 @@ const getDriveService = () => {
     const clientId = process.env.GDRIVE_CLIENT_ID;
     const clientSecret = process.env.GDRIVE_CLIENT_SECRET;
     const refreshToken = process.env.GDRIVE_REFRESH_TOKEN;
-    // 1. Opsi OAuth2 (Untuk Akun Google Pribadi @gmail.com agar menggunakan kuota 15GB akun utama)
-    if (clientId && clientSecret && refreshToken) {
+    // Hanya gunakan OAuth2 jika credentials valid (bukan placeholder 'xxx')
+    const isValidOAuth = clientId && clientSecret && refreshToken &&
+        !clientId.includes('xxx') && !clientSecret.includes('xxx') && !refreshToken.includes('xxx');
+    if (isValidOAuth) {
         const oauth2Client = new googleapis_1.google.auth.OAuth2(clientId, clientSecret, 'https://developers.google.com/oauthplayground');
         oauth2Client.setCredentials({ refresh_token: refreshToken });
         return googleapis_1.google.drive({ version: 'v3', auth: oauth2Client });
     }
-    // 2. Opsi Service Account (Untuk Google Workspace / Shared Drive)
+    // Fallback ke Service Account (serviceAccountKey.json)
     const keyPath = path_1.default.resolve(__dirname, '../../serviceAccountKey.json');
     if (!fs_1.default.existsSync(keyPath)) {
-        throw new Error('File serviceAccountKey.json tidak ditemukan dan OAuth2 credentials belum diset.');
+        throw new Error('File serviceAccountKey.json tidak ditemukan.');
     }
     const auth = new googleapis_1.google.auth.GoogleAuth({
         keyFile: keyPath,
