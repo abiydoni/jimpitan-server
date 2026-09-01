@@ -7,18 +7,29 @@ exports.uploadFileToDrive = exports.getOrCreateFolder = void 0;
 const googleapis_1 = require("googleapis");
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
-/**
- * Mendapatkan instance Google Drive API yang sudah terautentikasi
- * menggunakan serviceAccountKey.json yang sama dengan Firebase.
- */
+const dotenv_1 = __importDefault(require("dotenv"));
+dotenv_1.default.config();
 const getDriveService = () => {
+    const clientId = process.env.GDRIVE_CLIENT_ID?.trim();
+    const clientSecret = process.env.GDRIVE_CLIENT_SECRET?.trim();
+    const refreshToken = process.env.GDRIVE_REFRESH_TOKEN?.trim();
+    // Hanya gunakan OAuth2 jika credentials valid (bukan placeholder 'xxx' dan tidak kosong)
+    const isValidOAuth = !!(clientId && clientSecret && refreshToken &&
+        clientId.length > 10 && clientSecret.length > 5 && refreshToken.length > 5 &&
+        !clientId.includes('xxx') && !clientSecret.includes('xxx') && !refreshToken.includes('xxx'));
+    if (isValidOAuth) {
+        const oauth2Client = new googleapis_1.google.auth.OAuth2(clientId, clientSecret, 'https://developers.google.com/oauthplayground');
+        oauth2Client.setCredentials({ refresh_token: refreshToken });
+        return googleapis_1.google.drive({ version: 'v3', auth: oauth2Client });
+    }
+    // Fallback ke Service Account (serviceAccountKey.json)
     const keyPath = path_1.default.resolve(__dirname, '../../serviceAccountKey.json');
     if (!fs_1.default.existsSync(keyPath)) {
-        throw new Error('File serviceAccountKey.json tidak ditemukan.');
+        throw new Error('File serviceAccountKey.json tidak ditemukan dan OAuth2 credentials belum di-set di .env.');
     }
     const auth = new googleapis_1.google.auth.GoogleAuth({
         keyFile: keyPath,
-        scopes: ['https://www.googleapis.com/auth/drive.file'],
+        scopes: ['https://www.googleapis.com/auth/drive'],
     });
     return googleapis_1.google.drive({ version: 'v3', auth });
 };
@@ -29,6 +40,8 @@ const getOrCreateFolder = async (folderName, parentFolderId) => {
             q: `mimeType='application/vnd.google-apps.folder' and name='${folderName}' and '${parentFolderId}' in parents and trashed=false`,
             fields: 'files(id, name)',
             spaces: 'drive',
+            supportsAllDrives: true,
+            includeItemsFromAllDrives: true,
         });
         if (res.data.files && res.data.files.length > 0) {
             return res.data.files[0].id;
@@ -41,6 +54,7 @@ const getOrCreateFolder = async (folderName, parentFolderId) => {
         const folderRes = await drive.files.create({
             requestBody: fileMetadata,
             fields: 'id',
+            supportsAllDrives: true,
         });
         return folderRes.data.id;
     }
@@ -76,6 +90,7 @@ const uploadFileToDrive = async (filePath, folderId, customFileName) => {
             requestBody: fileMetadata,
             media: media,
             fields: 'id, name, webViewLink',
+            supportsAllDrives: true,
         });
         return response.data;
     }

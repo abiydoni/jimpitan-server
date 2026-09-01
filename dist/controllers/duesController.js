@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteJimpitanHistory = exports.createJimpitanHistory = exports.getJimpitanHistory = exports.deleteExemption = exports.updateExemption = exports.createExemption = exports.getExemptions = exports.deleteTariff = exports.updateTariff = exports.createTariff = exports.getTariffs = exports.deleteDuesJournal = exports.createDuesJournal = exports.getDuesJournals = void 0;
 const models_1 = require("../models");
 const firebaseService_1 = require("../services/firebaseService");
+const sequelize_1 = require("sequelize");
 // ==========================================
 // DUES JOURNALS (Iuran & Kas Umum)
 // ==========================================
@@ -230,6 +231,27 @@ exports.getJimpitanHistory = getJimpitanHistory;
 const createJimpitanHistory = async (req, res) => {
     try {
         console.log('createJimpitanHistory called with:', req.body);
+        const { villageId, kkId, date, timestamp } = req.body;
+        if (villageId && kkId) {
+            // Determine target date (YYYY-MM-DD)
+            const targetDate = date || (timestamp ? String(timestamp).split('T')[0] : new Date().toISOString().slice(0, 10));
+            // Check if a record already exists for the same village, kkId, and date
+            const existing = await models_1.JimpitanHistory.findOne({
+                where: {
+                    villageId,
+                    kkId,
+                    [sequelize_1.Op.or]: [
+                        { date: targetDate },
+                        { timestamp: { [sequelize_1.Op.like]: `${targetDate}%` } }
+                    ]
+                }
+            });
+            if (existing) {
+                console.log(`[Jimpitan] Duplicate scan ignored for kkId ${kkId} on ${targetDate}`);
+                res.status(201).json({ success: true, data: existing, isDuplicate: true, message: 'Data jimpitan sudah tercatat hari ini.' });
+                return;
+            }
+        }
         const payload = {
             id: req.body.id || `jimpitan_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
             ...req.body

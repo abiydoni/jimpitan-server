@@ -24,7 +24,7 @@ const connectDB = async () => {
             await exports.sequelize.authenticate();
             (0, startupLogs_1.addStartupLog)('✅ Koneksi ke MySQL berhasil.');
             // Sinkronisasi model ke database (otomatis membuat tabel jika belum ada)
-            await exports.sequelize.sync({ alter: true });
+            await exports.sequelize.sync();
             (0, startupLogs_1.addStartupLog)('✅ Semua model berhasil disinkronisasi ke database.');
             try {
                 await exports.sequelize.query("ALTER TABLE invoices ADD COLUMN paymentProof LONGTEXT NULL;");

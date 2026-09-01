@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { Op } from 'sequelize';
 import { Village, User, Menu, Slide, Role, UserRole, Tariff, sequelize, SubscriptionPlan, VillageSubscription, ChatMessage, DuesJournal, JimpitanHistory } from '../models';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -150,13 +151,17 @@ export const registerVillage = async (req: Request, res: Response): Promise<void
       config
     }, { transaction });
 
+    const sanitizedEmail = (typeof email === 'string' && email.trim().length > 0)
+      ? email.trim()
+      : null;
+
     // 3. Setup user as ADMIN for the new village
     const [user, created] = await User.findOrCreate({
       where: { uid },
       defaults: {
         uid,
         name: name || 'Admin Desa',
-        email: email || '',
+        email: sanitizedEmail,
         photoUrl: photoUrl || '',
         status: 'ACTIVE',
         villageId
@@ -167,11 +172,14 @@ export const registerVillage = async (req: Request, res: Response): Promise<void
     if (!created) {
       await user.update({
         status: 'ACTIVE',
-        villageId
+        villageId,
+        ...(name ? { name } : {}),
+        ...(sanitizedEmail ? { email: sanitizedEmail } : {})
       }, { transaction });
     }
 
     // Assign Role ADMIN_DESA
+    await Role.destroy({ where: { userId: uid }, transaction });
     await Role.create({
       id: `role_${uid}_ADMIN_DESA_${Date.now()}`,
       name: 'ADMIN_DESA',
@@ -283,10 +291,21 @@ export const getUsers = async (req: Request, res: Response): Promise<void> => {
 export const deleteUserFamily = async (req: Request, res: Response): Promise<void> => {
   try {
     const { familyId } = req.params;
-    await User.destroy({ where: { familyId } });
-    const { firebaseService } = require('../services/firebaseService');
-    firebaseService.sendSyncNotification(req.body.villageId || 'all', 'REFRESH_USERS');
-    res.json({ success: true, message: 'Family deleted' });
+    await User.destroy({
+      where: {
+        [Op.or]: [
+          { familyId },
+          { uid: familyId }
+        ]
+      }
+    });
+    const firebaseService = require('../services/firebaseService');
+    try {
+      firebaseService.sendSyncNotification(req.body.villageId || 'all', 'REFRESH_USERS');
+    } catch (e) {
+      console.error('Failed to send sync notification:', e);
+    }
+    res.json({ success: true, message: 'Family or user deleted' });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -295,58 +314,111 @@ export const deleteUserFamily = async (req: Request, res: Response): Promise<voi
 export const saveUserFamily = async (req: Request, res: Response): Promise<void> => {
   const transaction = await sequelize.transaction();
   try {
-    const { familyId, uniqueCode, villageId, familyMembers, deletedDocIds } = req.body;
+    const { familyId, uniqueCode, villageId, noKK, alamat, address, phone, phoneNumber, familyMembers, deletedDocIds } = req.body;
     
     // Process deletes
-    if (deletedDocIds && deletedDocIds.length > 0) {
-      await User.destroy({ where: { uid: deletedDocIds }, transaction });
+    if (deletedDocIds && Array.isArray(deletedDocIds) && deletedDocIds.length > 0) {
+      const validDeletes = deletedDocIds.filter(Boolean);
+      if (validDeletes.length > 0) {
+        await User.destroy({ where: { uid: validDeletes }, transaction });
+      }
     }
 
+    const familyNoKK = noKK ?? '';
+    const familyAlamat = alamat ?? address ?? '';
+    const familyPhone = phone ?? phoneNumber ?? '';
+
     // Process upserts
-    for (const member of familyMembers) {
-      const { docId, roles, ...userData } = member;
-      const [user, created] = await User.findOrCreate({
-        where: { uid: docId },
-        defaults: {
-          uid: docId,
-          familyId,
-          uniqueCode,
-          villageId,
-          status: 'ACTIVE',
-          ...userData
-        },
-        transaction
-      });
+    if (Array.isArray(familyMembers)) {
+      for (const member of familyMembers) {
+        const { docId, uid, id, _docId, roles, email, ...userData } = member;
 
-      if (!created) {
-        await user.update({
-          familyId,
-          uniqueCode,
-          villageId,
-          status: 'ACTIVE',
-          ...userData
-        }, { transaction });
-      }
-      console.log('--- DEBUG USER createdAt ---', userData.createdAt);
-      if (userData.createdAt) {
-        (user as any).setDataValue('createdAt', new Date(userData.createdAt as string));
-        (user as any).changed('createdAt', true);
-        await user.save({ transaction });
-        console.log('--- USER CREATED AT UPDATED ---', user.getDataValue('createdAt'));
-      }
+        const targetDocId = (docId || uid || id || _docId || '').toString().trim() ||
+          (`${Date.now()}_${Math.floor(Math.random() * 1000)}`);
 
-      // Process roles
-      if (roles && Array.isArray(roles)) {
-        const uniqueRoles = roles.filter((val: any, idx: number, arr: any[]) => arr.indexOf(val) === idx) as string[];
-        await Role.destroy({ where: { userId: docId }, transaction });
-        for (let index = 0; index < uniqueRoles.length; index++) {
-           const roleName = uniqueRoles[index];
-           await Role.create({
-             id: `ur_${docId}_${roleName}_${Date.now()}_${index}`,
-             name: roleName,
-             userId: docId,
-             villageId
-           }, { transaction });
+        const memberName = (member.name || member.namaLengkap || member.nama || '').toString().trim();
+        const memberNoKK = (member.noKK || familyNoKK || '').toString().trim();
+        const memberAlamat = (member.alamat || member.address || familyAlamat || '').toString().trim();
+        const memberPhone = (member.phoneNumber || member.phone || familyPhone || '').toString().trim();
+
+        let rawEmail = (typeof email === 'string') ? email.trim() : '';
+        if (rawEmail === '-' || rawEmail.toLowerCase() === 'kosong' || rawEmail === '.' || rawEmail === 'null') {
+          rawEmail = '';
+        }
+
+        // Sanitize email: convert invalid email or empty string to null so MySQL unique index won't fail
+        let sanitizedEmail = (rawEmail.length > 0 && rawEmail.includes('@'))
+          ? rawEmail
+          : null;
+
+        // Cegah crash jika email sudah digunakan oleh user lain (dengan uid berbeda)
+        if (sanitizedEmail) {
+          const existingUserWithEmail = await User.findOne({
+            where: {
+              email: sanitizedEmail,
+              uid: { [Op.ne]: targetDocId }
+            },
+            transaction
+          });
+          if (existingUserWithEmail) {
+            // Email sudah dipakai oleh user lain, abaikan penimpaan email agar transaksi tidak crash
+            sanitizedEmail = null;
+          }
+        }
+
+        const sanitizedMemberData = {
+          ...userData,
+          name: memberName,
+          email: sanitizedEmail,
+          noKK: memberNoKK,
+          alamat: memberAlamat,
+          phoneNumber: memberPhone,
+        };
+
+        const [user, created] = await User.findOrCreate({
+          where: { uid: targetDocId },
+          defaults: {
+            uid: targetDocId,
+            familyId: familyId || targetDocId,
+            uniqueCode: uniqueCode || '',
+            villageId: villageId || '',
+            status: 'ACTIVE',
+            ...sanitizedMemberData
+          },
+          transaction
+        });
+
+        if (!created) {
+          await user.update({
+            familyId: familyId || targetDocId,
+            uniqueCode: uniqueCode || user.getDataValue('uniqueCode'),
+            villageId: villageId || user.getDataValue('villageId'),
+            status: 'ACTIVE',
+            ...sanitizedMemberData
+          }, { transaction });
+        }
+
+        if (userData.createdAt) {
+          (user as any).setDataValue('createdAt', new Date(userData.createdAt as string));
+          (user as any).changed('createdAt', true);
+          await user.save({ transaction });
+        }
+
+        // Process roles
+        if (roles && Array.isArray(roles)) {
+          const stringRoles = roles.map((r: any) => (typeof r === 'string' ? r : (r?.name || r?.id || 'WARGA'))).filter(Boolean);
+          const uniqueRoles = Array.from(new Set(stringRoles));
+
+          await Role.destroy({ where: { userId: targetDocId }, transaction });
+          for (let index = 0; index < uniqueRoles.length; index++) {
+             const roleName = uniqueRoles[index];
+             await Role.create({
+               id: `ur_${targetDocId}_${roleName}_${Date.now()}_${index}`,
+               name: roleName,
+               userId: targetDocId,
+               villageId: villageId || user.getDataValue('villageId')
+             }, { transaction });
+          }
         }
       }
     }
@@ -354,15 +426,28 @@ export const saveUserFamily = async (req: Request, res: Response): Promise<void>
     await transaction.commit();
     res.json({ success: true, message: 'Family saved successfully' });
   } catch (error: any) {
+    await transaction.rollback();
+
+    let errorMessage = error.message;
+    if (error.name === 'SequelizeValidationError' || error.name === 'SequelizeUniqueConstraintError') {
+      if (error.errors && Array.isArray(error.errors)) {
+        errorMessage = error.errors.map((e: any) => {
+          if (e.path === 'email' || e.message?.includes('email')) {
+            return `Email '${e.value || ''}' sudah digunakan oleh pengguna lain. Silakan kosongkan atau gunakan email lain.`;
+          }
+          return e.message;
+        }).join(', ');
+      }
+    }
+
     const fs = require('fs');
     try {
-      fs.writeFileSync('save_error.log', JSON.stringify({ message: error.message, stack: error.stack, type: error.name }, null, 2));
+      fs.writeFileSync('save_error.log', JSON.stringify({ message: errorMessage, stack: error.stack, type: error.name }, null, 2));
     } catch (e) {
       console.error('Failed to write save_error.log', e);
     }
     console.error('SAVE ERROR:', error);
-    await transaction.rollback();
-    res.status(500).json({ success: false, message: error.message });
+    res.status(400).json({ success: false, message: errorMessage });
   }
 };
 
@@ -408,20 +493,44 @@ export const updateUserStatus = async (req: Request, res: Response): Promise<voi
     const { uid } = req.params;
     const { status, villageId } = req.body;
     
-    const user = await User.findByPk(uid as string);
-    if (!user) {
+    const users = await User.findAll({
+      where: {
+        [Op.or]: [
+          { uid: uid },
+          { familyId: uid }
+        ]
+      }
+    });
+
+    if (!users || users.length === 0) {
       res.status(404).json({ success: false, message: 'User not found' });
       return;
     }
     
-    await user.update({ status, villageId });
+    const updateData: any = { status };
+    if (villageId) updateData.villageId = villageId;
+
+    const primaryFamilyId = users[0].getDataValue('familyId');
+    await User.update(updateData, {
+      where: {
+        [Op.or]: [
+          { uid: uid },
+          { familyId: uid },
+          ...(primaryFamilyId ? [{ familyId: primaryFamilyId }] : [])
+        ]
+      }
+    });
+
+    const targetVillageId = villageId || users[0].getDataValue('villageId') || 'all';
+
     try {
-      const { firebaseService } = require('../services/firebaseService');
-      firebaseService.sendSyncNotification(villageId || user.getDataValue('villageId') || 'all', 'REFRESH_USERS');
+      const firebaseService = require('../services/firebaseService');
+      firebaseService.sendSyncNotification(targetVillageId, 'REFRESH_USERS');
     } catch (e) {
       console.error('Failed to send sync notification:', e);
     }
-    res.json({ success: true, data: user });
+
+    res.json({ success: true, message: 'User status updated successfully' });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -463,7 +572,7 @@ export const updateUserRoles = async (req: Request, res: Response): Promise<void
     await transaction.commit();
     
     try {
-      const { firebaseService } = require('../services/firebaseService');
+      const firebaseService = require('../services/firebaseService');
       firebaseService.sendSyncNotification(villageId || user.getDataValue('villageId') || 'all', 'REFRESH_USERS');
     } catch (e) {
       console.error('Failed to send sync notification:', e);
@@ -578,7 +687,7 @@ export const linkUserAccount = async (req: Request, res: Response): Promise<void
     await transaction.commit();
 
     try {
-      const { firebaseService } = require('../services/firebaseService');
+      const firebaseService = require('../services/firebaseService');
       firebaseService.sendSyncNotification(villageIdVal || 'all', 'REFRESH_USERS');
     } catch (e) {
       console.error('Failed to send sync notification:', e);
@@ -766,8 +875,21 @@ export const bulkImportUsers = async (req: Request, res: Response): Promise<void
             rawEmail = '';
         }
 
-        // Atasi error Duplicate Entry jika email kosong (karena email bersifat unique dan notNull di DB)
-        const finalEmail = (rawEmail !== '') ? rawEmail : `dummy_${docId}@noemail.com`;
+        // Atasi error Duplicate Entry jika email kosong (karena email bersifat unique di DB)
+        const sanitizedEmail = (typeof rawEmail === 'string' && rawEmail.trim().length > 0 && rawEmail.includes('@'))
+          ? rawEmail.trim()
+          : null;
+
+        const memberName = (member.name || member.namaLengkap || member.nama || 'Warga').toString().trim();
+        const statusKawin = member.statusPerkawinan || member.status_perkawinan || 'Belum Kawin';
+
+        const sanitizedMemberData = {
+          ...userData,
+          name: memberName,
+          email: sanitizedEmail,
+          statusPerkawinan: statusKawin,
+          statusHidup: (member.statusHidup === 'Hidup' ? 'Aktif' : (member.statusHidup || 'Aktif')),
+        };
 
         const [user, created] = await User.findOrCreate({
           where: { uid: docId },
@@ -776,8 +898,7 @@ export const bulkImportUsers = async (req: Request, res: Response): Promise<void
             familyId,
             villageId,
             status: 'ACTIVE',
-            email: finalEmail,
-            ...userData
+            ...sanitizedMemberData
           },
           transaction
         });
@@ -787,8 +908,7 @@ export const bulkImportUsers = async (req: Request, res: Response): Promise<void
             familyId,
             villageId,
             status: 'ACTIVE',
-            email: finalEmail,
-            ...userData
+            ...sanitizedMemberData
           }, { transaction });
         }
 
@@ -799,18 +919,19 @@ export const bulkImportUsers = async (req: Request, res: Response): Promise<void
         }
 
         // Process roles
-        if (roles && Array.isArray(roles)) {
-          const uniqueRoles = roles.filter((val: any, idx: number, arr: any[]) => arr.indexOf(val) === idx) as string[];
-          await Role.destroy({ where: { userId: docId }, transaction });
-          for (let index = 0; index < uniqueRoles.length; index++) {
-             const roleName = uniqueRoles[index];
-             await Role.create({
-               id: `ur_${docId}_${roleName}_${Date.now()}_${index}`,
-               userId: docId,
-               name: roleName,
-               villageId
-             }, { transaction });
-          }
+        const rawRoles = (roles && Array.isArray(roles) && roles.length > 0) ? roles : ['WARGA'];
+        const stringRoles = rawRoles.map((r: any) => (typeof r === 'string' ? r : (r?.name || r?.id || 'WARGA'))).filter(Boolean);
+        const uniqueRoles = Array.from(new Set(stringRoles));
+
+        await Role.destroy({ where: { userId: docId }, transaction });
+        for (let index = 0; index < uniqueRoles.length; index++) {
+           const roleName = uniqueRoles[index];
+           await Role.create({
+             id: `ur_${docId}_${roleName}_${Date.now()}_${index}`,
+             userId: docId,
+             name: roleName,
+             villageId
+           }, { transaction });
         }
       }
     }

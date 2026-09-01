@@ -266,9 +266,10 @@
 
             <!-- Memory Usage -->
             <div class="card">
-                <h3 class="card-title">🧠 Penggunaan Memori</h3>
-                <div class="stat-value" id="mem-val">0 / 0 MB</div>
-                <canvas id="memChart" width="300" height="60" style="width: 100%; margin-top: 1rem; border-bottom: 1px solid rgba(255,255,255,0.1);"></canvas>
+                <h3 class="card-title">🧠 Memori Aplikasi Node.js</h3>
+                <div class="stat-value" id="mem-val">0 MB</div>
+                <div class="stat-label" id="sys-mem-val" style="font-size: 0.8rem; color: #94a3b8; margin-top: 0.25rem;">Server Total: 0 MB</div>
+                <canvas id="memChart" width="300" height="50" style="width: 100%; margin-top: 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.1);"></canvas>
             </div>
 
             <!-- Uptime -->
@@ -321,8 +322,12 @@
                     cpuBar.style.width = `${data.cpuUsage}%`;
                     cpuBar.style.backgroundColor = data.cpuUsage > 80 ? 'var(--danger)' : (data.cpuUsage > 50 ? 'var(--warning)' : 'var(--accent)');
 
-                    // Update Memory
-                    document.getElementById('mem-val').innerText = `${data.usedMemMb} MB`;
+                    // Update Memory (RAM Aplikasi Node.js)
+                    const appMem = data.appRssMbFormatted || data.usedMemMb;
+                    const sysUsed = data.systemUsedMemMbFormatted || data.totalMemMb;
+                    const sysTotal = data.systemTotalMemMbFormatted || '0';
+                    document.getElementById('mem-val').innerText = `${appMem} MB`;
+                    document.getElementById('sys-mem-val').innerText = `Total RAM Server OS: ${sysUsed} MB / ${sysTotal} MB (${data.memoryUsagePercent}%)`;
                     
                     // Add to history and draw chart
                     memHistory.push(data.memoryUsagePercent);

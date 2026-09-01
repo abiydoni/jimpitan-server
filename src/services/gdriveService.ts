@@ -1,21 +1,40 @@
 import { google } from 'googleapis';
 import fs from 'fs';
 import path from 'path';
+import dotenv from 'dotenv';
 
-/**
- * Mendapatkan instance Google Drive API yang sudah terautentikasi
- * menggunakan serviceAccountKey.json yang sama dengan Firebase.
- */
+dotenv.config();
+
 const getDriveService = () => {
+  const clientId = process.env.GDRIVE_CLIENT_ID?.trim();
+  const clientSecret = process.env.GDRIVE_CLIENT_SECRET?.trim();
+  const refreshToken = process.env.GDRIVE_REFRESH_TOKEN?.trim();
+
+  // Hanya gunakan OAuth2 jika credentials valid (bukan placeholder 'xxx' dan tidak kosong)
+  const isValidOAuth = !!(clientId && clientSecret && refreshToken &&
+    clientId.length > 10 && clientSecret.length > 5 && refreshToken.length > 5 &&
+    !clientId.includes('xxx') && !clientSecret.includes('xxx') && !refreshToken.includes('xxx'));
+
+  if (isValidOAuth) {
+    const oauth2Client = new google.auth.OAuth2(
+      clientId,
+      clientSecret,
+      'https://developers.google.com/oauthplayground'
+    );
+    oauth2Client.setCredentials({ refresh_token: refreshToken });
+    return google.drive({ version: 'v3', auth: oauth2Client });
+  }
+
+  // Fallback ke Service Account (serviceAccountKey.json)
   const keyPath = path.resolve(__dirname, '../../serviceAccountKey.json');
   
   if (!fs.existsSync(keyPath)) {
-    throw new Error('File serviceAccountKey.json tidak ditemukan.');
+    throw new Error('File serviceAccountKey.json tidak ditemukan dan OAuth2 credentials belum di-set di .env.');
   }
 
   const auth = new google.auth.GoogleAuth({
     keyFile: keyPath,
-    scopes: ['https://www.googleapis.com/auth/drive.file'],
+    scopes: ['https://www.googleapis.com/auth/drive'],
   });
 
   return google.drive({ version: 'v3', auth });
@@ -29,6 +48,8 @@ export const getOrCreateFolder = async (folderName: string, parentFolderId: stri
       q: `mimeType='application/vnd.google-apps.folder' and name='${folderName}' and '${parentFolderId}' in parents and trashed=false`,
       fields: 'files(id, name)',
       spaces: 'drive',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
     });
     
     if (res.data.files && res.data.files.length > 0) {
@@ -44,6 +65,7 @@ export const getOrCreateFolder = async (folderName: string, parentFolderId: stri
     const folderRes = await drive.files.create({
       requestBody: fileMetadata,
       fields: 'id',
+      supportsAllDrives: true,
     });
     
     return folderRes.data.id as string;
@@ -83,6 +105,7 @@ export const uploadFileToDrive = async (filePath: string, folderId: string, cust
       requestBody: fileMetadata,
       media: media,
       fields: 'id, name, webViewLink',
+      supportsAllDrives: true,
     });
     
     return response.data;

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { DuesJournal, Tariff, Exemption, JimpitanHistory } from '../models';
 import { sendSyncNotification } from '../services/firebaseService';
+import { Op } from 'sequelize';
 
 // ==========================================
 // DUES JOURNALS (Iuran & Kas Umum)
@@ -230,6 +231,32 @@ export const getJimpitanHistory = async (req: Request, res: Response): Promise<v
 export const createJimpitanHistory = async (req: Request, res: Response): Promise<void> => {
   try {
     console.log('createJimpitanHistory called with:', req.body);
+
+    const { villageId, kkId, date, timestamp } = req.body;
+
+    if (villageId && kkId) {
+      // Determine target date (YYYY-MM-DD)
+      const targetDate = date || (timestamp ? String(timestamp).split('T')[0] : new Date().toISOString().slice(0, 10));
+
+      // Check if a record already exists for the same village, kkId, and date
+      const existing = await JimpitanHistory.findOne({
+        where: {
+          villageId,
+          kkId,
+          [Op.or]: [
+            { date: targetDate },
+            { timestamp: { [Op.like]: `${targetDate}%` } }
+          ]
+        }
+      });
+
+      if (existing) {
+        console.log(`[Jimpitan] Duplicate scan ignored for kkId ${kkId} on ${targetDate}`);
+        res.status(201).json({ success: true, data: existing, isDuplicate: true, message: 'Data jimpitan sudah tercatat hari ini.' });
+        return;
+      }
+    }
+
     const payload = {
       id: req.body.id || `jimpitan_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
       ...req.body
