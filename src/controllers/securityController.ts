@@ -29,10 +29,10 @@ export const backupDatabase = async (req: Request, res: Response): Promise<void>
 // 2. CLEAR SYSTEM LOGS / CACHE
 export const clearSystemCache = async (req: Request, res: Response): Promise<void> => {
   try {
-    // Sebagai contoh: Membersihkan folder uploads/temp jika ada
-    const tempDir = path.join(process.cwd(), 'uploads', 'temp');
     let deletedCount = 0;
 
+    // 1. Membersihkan folder uploads/temp jika ada
+    const tempDir = path.join(process.cwd(), 'uploads', 'temp');
     if (fs.existsSync(tempDir)) {
       const files = fs.readdirSync(tempDir);
       for (const file of files) {
@@ -44,9 +44,22 @@ export const clearSystemCache = async (req: Request, res: Response): Promise<voi
       }
     }
 
+    // 2. Membersihkan sisa file backup database lokal di uploads/backups
+    const backupDir = path.join(process.cwd(), 'uploads', 'backups');
+    if (fs.existsSync(backupDir)) {
+      const files = fs.readdirSync(backupDir);
+      for (const file of files) {
+        const filePath = path.join(backupDir, file);
+        if (fs.lstatSync(filePath).isFile()) {
+          fs.unlinkSync(filePath);
+          deletedCount++;
+        }
+      }
+    }
+
     res.json({ 
       success: true, 
-      message: `Cache dan log sistem berhasil dibersihkan. (${deletedCount} file dihapus)` 
+      message: `Cache dan file sisa backup berhasil dibersihkan. (${deletedCount} file dihapus)` 
     });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });

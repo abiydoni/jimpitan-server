@@ -32,9 +32,9 @@ exports.backupDatabase = backupDatabase;
 // 2. CLEAR SYSTEM LOGS / CACHE
 const clearSystemCache = async (req, res) => {
     try {
-        // Sebagai contoh: Membersihkan folder uploads/temp jika ada
-        const tempDir = path_1.default.join(process.cwd(), 'uploads', 'temp');
         let deletedCount = 0;
+        // 1. Membersihkan folder uploads/temp jika ada
+        const tempDir = path_1.default.join(process.cwd(), 'uploads', 'temp');
         if (fs_1.default.existsSync(tempDir)) {
             const files = fs_1.default.readdirSync(tempDir);
             for (const file of files) {
@@ -45,9 +45,21 @@ const clearSystemCache = async (req, res) => {
                 }
             }
         }
+        // 2. Membersihkan sisa file backup database lokal di uploads/backups
+        const backupDir = path_1.default.join(process.cwd(), 'uploads', 'backups');
+        if (fs_1.default.existsSync(backupDir)) {
+            const files = fs_1.default.readdirSync(backupDir);
+            for (const file of files) {
+                const filePath = path_1.default.join(backupDir, file);
+                if (fs_1.default.lstatSync(filePath).isFile()) {
+                    fs_1.default.unlinkSync(filePath);
+                    deletedCount++;
+                }
+            }
+        }
         res.json({
             success: true,
-            message: `Cache dan log sistem berhasil dibersihkan. (${deletedCount} file dihapus)`
+            message: `Cache dan file sisa backup berhasil dibersihkan. (${deletedCount} file dihapus)`
         });
     }
     catch (error) {

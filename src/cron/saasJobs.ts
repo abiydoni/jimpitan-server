@@ -48,13 +48,16 @@ export const initSaasCronJobs = () => {
       const sqlFilePath = await generateDatabaseBackup();
       console.log(`✅ File backup lokal berhasil dibuat: ${sqlFilePath}`);
 
-      // 2. Upload ke Google Drive dengan nama custom dan ke folder bulan ini
-      const uploadResult = await uploadFileToDrive(sqlFilePath, targetFolderId, customFileName);
-      console.log(`✅ Berhasil diunggah ke GDrive: ${uploadResult.name} (Link: ${uploadResult.webViewLink})`);
-      
-      // 3. Hapus file lokal setelah berhasil di-upload untuk hemat disk
-      if (fs.existsSync(sqlFilePath)) {
-        fs.unlinkSync(sqlFilePath);
+      try {
+        // 2. Upload ke Google Drive dengan nama custom dan ke folder bulan ini
+        const uploadResult = await uploadFileToDrive(sqlFilePath, targetFolderId, customFileName);
+        console.log(`✅ Berhasil diunggah ke GDrive: ${uploadResult.name} (Link: ${uploadResult.webViewLink})`);
+      } finally {
+        // 3. Hapus file lokal setelah di-upload (atau jika gagal upload) untuk hemat disk
+        if (fs.existsSync(sqlFilePath)) {
+          fs.unlinkSync(sqlFilePath);
+          console.log(`🧹 File backup lokal dibersihkan: ${sqlFilePath}`);
+        }
       }
     } catch (error) {
       console.error('❌ Gagal melakukan Auto-Backup Google Drive:', error);

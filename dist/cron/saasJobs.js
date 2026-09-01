@@ -46,12 +46,17 @@ const initSaasCronJobs = () => {
             // 1. Buat file .sql secara lokal
             const sqlFilePath = await (0, dbBackup_1.generateDatabaseBackup)();
             console.log(`✅ File backup lokal berhasil dibuat: ${sqlFilePath}`);
-            // 2. Upload ke Google Drive dengan nama custom dan ke folder bulan ini
-            const uploadResult = await (0, gdriveService_1.uploadFileToDrive)(sqlFilePath, targetFolderId, customFileName);
-            console.log(`✅ Berhasil diunggah ke GDrive: ${uploadResult.name} (Link: ${uploadResult.webViewLink})`);
-            // 3. Hapus file lokal setelah berhasil di-upload untuk hemat disk
-            if (fs_1.default.existsSync(sqlFilePath)) {
-                fs_1.default.unlinkSync(sqlFilePath);
+            try {
+                // 2. Upload ke Google Drive dengan nama custom dan ke folder bulan ini
+                const uploadResult = await (0, gdriveService_1.uploadFileToDrive)(sqlFilePath, targetFolderId, customFileName);
+                console.log(`✅ Berhasil diunggah ke GDrive: ${uploadResult.name} (Link: ${uploadResult.webViewLink})`);
+            }
+            finally {
+                // 3. Hapus file lokal setelah di-upload (atau jika gagal upload) untuk hemat disk
+                if (fs_1.default.existsSync(sqlFilePath)) {
+                    fs_1.default.unlinkSync(sqlFilePath);
+                    console.log(`🧹 File backup lokal dibersihkan: ${sqlFilePath}`);
+                }
             }
         }
         catch (error) {
