@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+﻿import { Request, Response } from 'express';
 import { Op } from 'sequelize';
 import { Village, User, Menu, Slide, Role, UserRole, Tariff, sequelize, SubscriptionPlan, VillageSubscription, ChatMessage, DuesJournal, JimpitanHistory } from '../models';
 import { v4 as uuidv4 } from 'uuid';
@@ -291,17 +291,32 @@ export const getUsers = async (req: Request, res: Response): Promise<void> => {
 export const deleteUserFamily = async (req: Request, res: Response): Promise<void> => {
   try {
     const { familyId } = req.params;
-    await User.destroy({
-      where: {
-        [Op.or]: [
-          { familyId },
-          { uid: familyId }
-        ]
-      }
-    });
+    const { villageId } = req.body;
+
+    // SECURITY FIX: Tambah filter villageId agar tidak bisa hapus warga desa lain
+    const whereClause: any = {
+      [Op.or]: [
+        { familyId },
+        { uid: familyId }
+      ]
+    };
+    if (villageId) {
+      whereClause.villageId = villageId;
+    }
+
+    // Logging sebelum delete untuk audit trail
+    const toDelete = await User.findAll({ where: whereClause });
+    if (toDelete.length === 0) {
+      res.status(404).json({ success: false, message: 'Data keluarga tidak ditemukan atau bukan milik desa ini' });
+      return;
+    }
+    console.log(`[deleteUserFamily] Menghapus ${toDelete.length} user (familyId=${familyId}, villageId=${villageId}): ${toDelete.map((u: any) => `${u.getDataValue('uid')}(${u.getDataValue('name')})`).join(', ')}`);
+
+    await User.destroy({ where: whereClause });
+
     const firebaseService = require('../services/firebaseService');
     try {
-      firebaseService.sendSyncNotification(req.body.villageId || 'all', 'REFRESH_USERS');
+      firebaseService.sendSyncNotification(villageId || 'all', 'REFRESH_USERS');
     } catch (e) {
       console.error('Failed to send sync notification:', e);
     }
@@ -320,7 +335,17 @@ export const saveUserFamily = async (req: Request, res: Response): Promise<void>
     if (deletedDocIds && Array.isArray(deletedDocIds) && deletedDocIds.length > 0) {
       const validDeletes = deletedDocIds.filter(Boolean);
       if (validDeletes.length > 0) {
-        await User.destroy({ where: { uid: validDeletes }, transaction });
+        // SECURITY FIX: Pastikan hanya hapus user yang memang milik villageId yang sama
+        // Mencegah penghapusan warga dari desa lain jika ada bug di sisi klien (Flutter)
+        const deleteWhere: any = { uid: validDeletes };
+        if (villageId) {
+          deleteWhere.villageId = villageId;
+        }
+        const toDelete = await User.findAll({ where: deleteWhere, transaction });
+        console.log(`[saveUserFamily] Akan menghapus ${toDelete.length} user: ${toDelete.map((u: any) => u.getDataValue('uid')).join(', ')}`);
+        if (toDelete.length > 0) {
+          await User.destroy({ where: deleteWhere, transaction });
+        }
       }
     }
 
@@ -954,3 +979,5 @@ export const bulkImportUsers = async (req: Request, res: Response): Promise<void
     res.status(500).json({ success: false, message: errorMessage });
   }
 };
+
+

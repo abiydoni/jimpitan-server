@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+﻿import { Request, Response } from 'express';
 import { User, Role, Village } from '../models';
 import { AuthRequest } from '../middlewares/authMiddleware';
 
@@ -318,7 +318,21 @@ export const claimAccount = async (req: Request, res: Response): Promise<void> =
 
       const tempUser = await User.findByPk(uid);
       if (tempUser) {
-        await User.destroy({ where: { uid } });
+        // SECURITY FIX: Hanya hapus user sementara (INCOMPLETE/tanpa desa) bukan warga aktif desa lain
+        const tempStatus = tempUser.getDataValue('status');
+        const tempVillageId = tempUser.getDataValue('villageId');
+        if (tempStatus === 'INCOMPLETE' || !tempVillageId) {
+          console.log(`[claimAccount] Menghapus user sementara uid=${uid} (status=${tempStatus}, villageId=${tempVillageId})`);
+          await User.destroy({ where: { uid } });
+        } else {
+          // Ini warga aktif dari desa lain - JANGAN dihapus, batalkan proses klaim
+          console.warn(`[claimAccount] DIBATALKAN: uid=${uid} sudah merupakan warga aktif desa ${tempVillageId}, tidak dapat diklaim`);
+          res.status(409).json({ 
+            success: false, 
+            message: 'Akun Google ini sudah terdaftar sebagai warga aktif di desa lain. Hubungi admin desa untuk bantuan.' 
+          });
+          return;
+        }
       }
 
       await User.update({
@@ -346,3 +360,4 @@ export const claimAccount = async (req: Request, res: Response): Promise<void> =
     res.status(500).json({ success: false, message: error.message });
   }
 };
+

@@ -306,7 +306,22 @@ const claimAccount = async (req, res) => {
             }
             const tempUser = await models_1.User.findByPk(uid);
             if (tempUser) {
-                await models_1.User.destroy({ where: { uid } });
+                // SECURITY FIX: Hanya hapus user sementara (INCOMPLETE/tanpa desa) bukan warga aktif desa lain
+                const tempStatus = tempUser.getDataValue('status');
+                const tempVillageId = tempUser.getDataValue('villageId');
+                if (tempStatus === 'INCOMPLETE' || !tempVillageId) {
+                    console.log(`[claimAccount] Menghapus user sementara uid=${uid} (status=${tempStatus}, villageId=${tempVillageId})`);
+                    await models_1.User.destroy({ where: { uid } });
+                }
+                else {
+                    // Ini warga aktif dari desa lain - JANGAN dihapus, batalkan proses klaim
+                    console.warn(`[claimAccount] DIBATALKAN: uid=${uid} sudah merupakan warga aktif desa ${tempVillageId}, tidak dapat diklaim`);
+                    res.status(409).json({
+                        success: false,
+                        message: 'Akun Google ini sudah terdaftar sebagai warga aktif di desa lain. Hubungi admin desa untuk bantuan.'
+                    });
+                    return;
+                }
             }
             await models_1.User.update({
                 uid,
