@@ -445,9 +445,23 @@ const saveUserFamily = async (req, res) => {
                 }
             }
         }
-        const familyNoKK = noKK ?? '';
+        const familyNoKK = (noKK ?? '').toString().trim();
         const familyAlamat = alamat ?? address ?? '';
         const familyPhone = phone ?? phoneNumber ?? '';
+        // Cari apakah sudah ada familyId di desa ini yang menggunakan noKK yang sama agar otomatis bergabung
+        let resolvedFamilyId = familyId;
+        if (familyNoKK && familyNoKK.length >= 4) {
+            const existingKkUser = await models_1.User.findOne({
+                where: {
+                    noKK: familyNoKK,
+                    ...(villageId ? { villageId } : {})
+                },
+                transaction
+            });
+            if (existingKkUser && existingKkUser.getDataValue('familyId')) {
+                resolvedFamilyId = existingKkUser.getDataValue('familyId');
+            }
+        }
         // Process upserts
         if (Array.isArray(familyMembers)) {
             for (const member of familyMembers) {
@@ -488,11 +502,12 @@ const saveUserFamily = async (req, res) => {
                     alamat: memberAlamat,
                     phoneNumber: memberPhone,
                 };
+                const targetFamilyId = resolvedFamilyId || targetDocId;
                 const [user, created] = await models_1.User.findOrCreate({
                     where: { uid: targetDocId },
                     defaults: {
                         uid: targetDocId,
-                        familyId: familyId || targetDocId,
+                        familyId: targetFamilyId,
                         uniqueCode: uniqueCode || '',
                         villageId: villageId || '',
                         status: 'ACTIVE',
@@ -502,7 +517,7 @@ const saveUserFamily = async (req, res) => {
                 });
                 if (!created) {
                     await user.update({
-                        familyId: familyId || targetDocId,
+                        familyId: targetFamilyId,
                         uniqueCode: uniqueCode || user.getDataValue('uniqueCode'),
                         villageId: villageId || user.getDataValue('villageId'),
                         status: 'ACTIVE',
