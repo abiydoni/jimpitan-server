@@ -450,6 +450,7 @@ const saveUserFamily = async (req, res) => {
         const familyPhone = phone ?? phoneNumber ?? '';
         // Cari apakah sudah ada familyId di desa ini yang menggunakan noKK yang sama agar otomatis bergabung
         let resolvedFamilyId = familyId;
+        let resolvedUniqueCode = uniqueCode;
         if (familyNoKK && familyNoKK.length >= 4) {
             const existingKkUser = await models_1.User.findOne({
                 where: {
@@ -458,8 +459,13 @@ const saveUserFamily = async (req, res) => {
                 },
                 transaction
             });
-            if (existingKkUser && existingKkUser.getDataValue('familyId')) {
-                resolvedFamilyId = existingKkUser.getDataValue('familyId');
+            if (existingKkUser) {
+                if (existingKkUser.getDataValue('familyId')) {
+                    resolvedFamilyId = existingKkUser.getDataValue('familyId');
+                }
+                if (existingKkUser.getDataValue('uniqueCode')) {
+                    resolvedUniqueCode = existingKkUser.getDataValue('uniqueCode');
+                }
             }
         }
         // Process upserts
@@ -508,7 +514,7 @@ const saveUserFamily = async (req, res) => {
                     defaults: {
                         uid: targetDocId,
                         familyId: targetFamilyId,
-                        uniqueCode: uniqueCode || '',
+                        uniqueCode: resolvedUniqueCode || uniqueCode || '',
                         villageId: villageId || '',
                         status: 'ACTIVE',
                         ...sanitizedMemberData
@@ -518,7 +524,7 @@ const saveUserFamily = async (req, res) => {
                 if (!created) {
                     await user.update({
                         familyId: targetFamilyId,
-                        uniqueCode: uniqueCode || user.getDataValue('uniqueCode'),
+                        uniqueCode: resolvedUniqueCode || uniqueCode || user.getDataValue('uniqueCode'),
                         villageId: villageId || user.getDataValue('villageId'),
                         status: 'ACTIVE',
                         ...sanitizedMemberData

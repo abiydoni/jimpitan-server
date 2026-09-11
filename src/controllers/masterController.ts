@@ -488,6 +488,7 @@ export const saveUserFamily = async (req: Request, res: Response): Promise<void>
 
     // Cari apakah sudah ada familyId di desa ini yang menggunakan noKK yang sama agar otomatis bergabung
     let resolvedFamilyId = familyId;
+    let resolvedUniqueCode = uniqueCode;
     if (familyNoKK && familyNoKK.length >= 4) {
       const existingKkUser = await User.findOne({
         where: {
@@ -496,8 +497,13 @@ export const saveUserFamily = async (req: Request, res: Response): Promise<void>
         },
         transaction
       });
-      if (existingKkUser && existingKkUser.getDataValue('familyId')) {
-        resolvedFamilyId = existingKkUser.getDataValue('familyId');
+      if (existingKkUser) {
+        if (existingKkUser.getDataValue('familyId')) {
+          resolvedFamilyId = existingKkUser.getDataValue('familyId');
+        }
+        if (existingKkUser.getDataValue('uniqueCode')) {
+          resolvedUniqueCode = existingKkUser.getDataValue('uniqueCode');
+        }
       }
     }
 
@@ -555,7 +561,7 @@ export const saveUserFamily = async (req: Request, res: Response): Promise<void>
           defaults: {
             uid: targetDocId,
             familyId: targetFamilyId,
-            uniqueCode: uniqueCode || '',
+            uniqueCode: resolvedUniqueCode || uniqueCode || '',
             villageId: villageId || '',
             status: 'ACTIVE',
             ...sanitizedMemberData
@@ -566,7 +572,7 @@ export const saveUserFamily = async (req: Request, res: Response): Promise<void>
         if (!created) {
           await user.update({
             familyId: targetFamilyId,
-            uniqueCode: uniqueCode || user.getDataValue('uniqueCode'),
+            uniqueCode: resolvedUniqueCode || uniqueCode || user.getDataValue('uniqueCode'),
             villageId: villageId || user.getDataValue('villageId'),
             status: 'ACTIVE',
             ...sanitizedMemberData
