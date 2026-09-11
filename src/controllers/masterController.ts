@@ -297,13 +297,30 @@ export const getUsers = async (req: Request, res: Response): Promise<void> => {
       }]
     });
 
+    const nowMs = Date.now();
+    const staleOnlineUids: string[] = [];
+
     const formattedUsers = users.map((u: any) => {
       const userJSON = u.toJSON();
       if (userJSON.roles) {
         userJSON.roles = userJSON.roles.map((r: any) => r.name).filter((val: any, idx: number, arr: any[]) => arr.indexOf(val) === idx);
       }
+
+      // Validasi status online: jika isOnline true tapi lastSeen/updatedAt > 2 menit lalu, anggap offline
+      if (userJSON.isOnline) {
+        const lastActivity = userJSON.lastSeen ? new Date(userJSON.lastSeen).getTime() : (userJSON.updatedAt ? new Date(userJSON.updatedAt).getTime() : 0);
+        if (nowMs - lastActivity > 2 * 60 * 1000) {
+          userJSON.isOnline = false;
+          staleOnlineUids.push(userJSON.uid);
+        }
+      }
+
       return userJSON;
     });
+
+    if (staleOnlineUids.length > 0) {
+      User.update({ isOnline: false }, { where: { uid: staleOnlineUids } }).catch(() => {});
+    }
 
     res.json({ success: true, data: formattedUsers });
   } catch (error: any) {
@@ -1045,10 +1062,11 @@ export const updateOnlineStatus = async (req: Request, res: Response): Promise<v
   try {
     const { uid } = req.params;
     const { isOnline } = req.body;
-    const updateData: any = { isOnline: !!isOnline };
-    if (!isOnline) {
-      updateData.lastSeen = new Date();
-    }
+    const now = new Date();
+    const updateData: any = { 
+      isOnline: !!isOnline,
+      lastSeen: now 
+    };
     await User.update(updateData, { where: { uid } });
     res.json({ success: true });
   } catch (error: any) {

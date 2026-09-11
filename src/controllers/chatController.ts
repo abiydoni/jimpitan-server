@@ -137,6 +137,25 @@ export const getChatContacts = async (req: AuthRequest, res: Response): Promise<
       ]
     });
 
+    const nowMs = Date.now();
+    const staleOnlineUids: string[] = [];
+
+    const formattedUsers = users.map((u: any) => {
+      const userJSON = u.toJSON();
+      if (userJSON.isOnline) {
+        const lastActivity = userJSON.lastSeen ? new Date(userJSON.lastSeen).getTime() : 0;
+        if (nowMs - lastActivity > 2 * 60 * 1000) {
+          userJSON.isOnline = false;
+          staleOnlineUids.push(userJSON.uid);
+        }
+      }
+      return userJSON;
+    });
+
+    if (staleOnlineUids.length > 0) {
+      User.update({ isOnline: false }, { where: { uid: staleOnlineUids } }).catch(() => {});
+    }
+
     let groups: any[] = [];
     if (villageId === 'ALL') {
       // Grup untuk koordinasi antar admin desa (cocok dengan Flutter: GROUP_ADMINS)
@@ -173,7 +192,7 @@ export const getChatContacts = async (req: AuthRequest, res: Response): Promise<
     }
 
     // Gabungkan Grup di paling atas, disusul users
-    res.json({ success: true, data: [...groups, ...users] });
+    res.json({ success: true, data: [...groups, ...formattedUsers] });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -268,6 +287,7 @@ export const getUnreadCounts = async (req: AuthRequest, res: Response): Promise<
     }
 
     const counts: Record<string, number> = {};
+    const details: any[] = [];
 
     // 1. Pesan Personal Unread
     const unreadPersonalMessages = await Message.findAll({
@@ -276,14 +296,60 @@ export const getUnreadCounts = async (req: AuthRequest, res: Response): Promise<
         isRead: false,
         senderUid: { [Op.ne]: uid },
       },
-      attributes: ['senderUid', 'roomId'],
+      order: [['createdAt', 'DESC']],
     });
 
+    const personalGroups: Record<string, any[]> = {};
     unreadPersonalMessages.forEach((msg: any) => {
-      const key = msg.getDataValue('roomId') || msg.getDataValue('senderUid');
+      const senderUid = msg.getDataValue('senderUid');
+      const roomId = msg.getDataValue('roomId') || senderUid;
+      const key = roomId || senderUid;
       if (key) {
         counts[key] = (counts[key] || 0) + 1;
+        if (!personalGroups[key]) {
+          personalGroups[key] = [];
+        }
+        personalGroups[key].push(msg);
       }
+    });
+
+    // Ambil info sender untuk personal messages
+    const senderUids = Object.keys(personalGroups).map(k => {
+      const firstMsg = personalGroups[k][0];
+      return firstMsg.getDataValue('senderUid');
+    });
+
+    const sendersMap: Record<string, any> = {};
+    if (senderUids.length > 0) {
+      const senders = await User.findAll({
+        where: { uid: senderUids },
+        attributes: ['uid', 'name', 'foto', 'photoUrl'],
+      });
+      senders.forEach((s: any) => {
+        sendersMap[s.getDataValue('uid')] = s.toJSON();
+      });
+    }
+
+    Object.keys(personalGroups).forEach(key => {
+      const msgs = personalGroups[key];
+      const latestMsg = msgs[0];
+      const sUid = latestMsg.getDataValue('senderUid');
+      const senderUser = sendersMap[sUid];
+      let sName = latestMsg.getDataValue('senderName') || senderUser?.name || 'Warga';
+      if (sUid === 'SUPER_ADMIN') {
+        sName = 'Appsbee Support (Super Admin)';
+      }
+
+      details.push({
+        type: 'PERSONAL',
+        roomId: latestMsg.getDataValue('roomId') || key,
+        senderUid: sUid,
+        senderName: sName,
+        senderPhoto: senderUser?.foto || senderUser?.photoUrl || '',
+        message: latestMsg.getDataValue('message') || 'Pesan baru',
+        unreadCount: msgs.length,
+        createdAt: latestMsg.getDataValue('createdAt'),
+      });
     });
 
     // 2. Pesan Grup Unread (berdasarkan GroupReadState per user)
@@ -307,23 +373,54 @@ export const getUnreadCounts = async (req: AuthRequest, res: Response): Promise<
       readStateMap[rs.getDataValue('roomId')] = new Date(rs.getDataValue('lastReadAt'));
     });
 
+    const { Village } = require('../models');
+    let villageName = '';
+    if (userVillageId) {
+      const v = await Village.findByPk(userVillageId);
+      if (v) villageName = v.name;
+    }
+
     for (const roomId of userGroupRooms) {
       const lastReadAt = readStateMap[roomId] || new Date(0);
       
-      const unreadCount = await Message.count({
+      const unreadGroupMsgs = await Message.findAll({
         where: {
           roomId,
           senderUid: { [Op.ne]: uid },
           createdAt: { [Op.gt]: lastReadAt },
         },
+        order: [['createdAt', 'DESC']],
       });
 
-      if (unreadCount > 0) {
-        counts[roomId] = unreadCount;
+      if (unreadGroupMsgs.length > 0) {
+        counts[roomId] = unreadGroupMsgs.length;
+        const latestMsg = unreadGroupMsgs[0];
+        const groupDisplayName = roomId === 'GROUP_ADMINS'
+          ? 'Grup Admin Pusat'
+          : (villageName ? `Grup Warga - ${villageName}` : 'Grup Warga RT');
+        const lastSender = latestMsg.getDataValue('senderName') || 'Warga';
+
+        details.push({
+          type: 'GROUP',
+          roomId,
+          senderUid: latestMsg.getDataValue('senderUid'),
+          senderName: groupDisplayName,
+          lastSenderName: lastSender,
+          message: `${lastSender}: ${latestMsg.getDataValue('message') || ''}`,
+          unreadCount: unreadGroupMsgs.length,
+          createdAt: latestMsg.getDataValue('createdAt'),
+        });
       }
     }
 
-    res.json({ success: true, data: counts });
+    // Urutkan details dari yang paling baru
+    details.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    res.json({
+      success: true,
+      data: counts,
+      details,
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }

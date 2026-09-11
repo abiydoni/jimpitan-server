@@ -282,13 +282,26 @@ const getUsers = async (req, res) => {
                     required: false
                 }]
         });
+        const nowMs = Date.now();
+        const staleOnlineUids = [];
         const formattedUsers = users.map((u) => {
             const userJSON = u.toJSON();
             if (userJSON.roles) {
                 userJSON.roles = userJSON.roles.map((r) => r.name).filter((val, idx, arr) => arr.indexOf(val) === idx);
             }
+            // Validasi status online: jika isOnline true tapi lastSeen/updatedAt > 2 menit lalu, anggap offline
+            if (userJSON.isOnline) {
+                const lastActivity = userJSON.lastSeen ? new Date(userJSON.lastSeen).getTime() : (userJSON.updatedAt ? new Date(userJSON.updatedAt).getTime() : 0);
+                if (nowMs - lastActivity > 2 * 60 * 1000) {
+                    userJSON.isOnline = false;
+                    staleOnlineUids.push(userJSON.uid);
+                }
+            }
             return userJSON;
         });
+        if (staleOnlineUids.length > 0) {
+            models_1.User.update({ isOnline: false }, { where: { uid: staleOnlineUids } }).catch(() => { });
+        }
         res.json({ success: true, data: formattedUsers });
     }
     catch (error) {
@@ -978,10 +991,11 @@ const updateOnlineStatus = async (req, res) => {
     try {
         const { uid } = req.params;
         const { isOnline } = req.body;
-        const updateData = { isOnline: !!isOnline };
-        if (!isOnline) {
-            updateData.lastSeen = new Date();
-        }
+        const now = new Date();
+        const updateData = {
+            isOnline: !!isOnline,
+            lastSeen: now
+        };
         await models_1.User.update(updateData, { where: { uid } });
         res.json({ success: true });
     }

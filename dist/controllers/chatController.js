@@ -113,6 +113,22 @@ const getChatContacts = async (req, res) => {
                 ['lastSeen', 'DESC'] // Yang paling baru aktif di atas
             ]
         });
+        const nowMs = Date.now();
+        const staleOnlineUids = [];
+        const formattedUsers = users.map((u) => {
+            const userJSON = u.toJSON();
+            if (userJSON.isOnline) {
+                const lastActivity = userJSON.lastSeen ? new Date(userJSON.lastSeen).getTime() : 0;
+                if (nowMs - lastActivity > 2 * 60 * 1000) {
+                    userJSON.isOnline = false;
+                    staleOnlineUids.push(userJSON.uid);
+                }
+            }
+            return userJSON;
+        });
+        if (staleOnlineUids.length > 0) {
+            models_1.User.update({ isOnline: false }, { where: { uid: staleOnlineUids } }).catch(() => { });
+        }
         let groups = [];
         if (villageId === 'ALL') {
             // Grup untuk koordinasi antar admin desa (cocok dengan Flutter: GROUP_ADMINS)
@@ -148,7 +164,7 @@ const getChatContacts = async (req, res) => {
             }
         }
         // Gabungkan Grup di paling atas, disusul users
-        res.json({ success: true, data: [...groups, ...users] });
+        res.json({ success: true, data: [...groups, ...formattedUsers] });
     }
     catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -238,6 +254,7 @@ const getUnreadCounts = async (req, res) => {
             return;
         }
         const counts = {};
+        const details = [];
         // 1. Pesan Personal Unread
         const unreadPersonalMessages = await models_1.ChatMessage.findAll({
             where: {
@@ -245,13 +262,55 @@ const getUnreadCounts = async (req, res) => {
                 isRead: false,
                 senderUid: { [sequelize_1.Op.ne]: uid },
             },
-            attributes: ['senderUid', 'roomId'],
+            order: [['createdAt', 'DESC']],
         });
+        const personalGroups = {};
         unreadPersonalMessages.forEach((msg) => {
-            const key = msg.getDataValue('roomId') || msg.getDataValue('senderUid');
+            const senderUid = msg.getDataValue('senderUid');
+            const roomId = msg.getDataValue('roomId') || senderUid;
+            const key = roomId || senderUid;
             if (key) {
                 counts[key] = (counts[key] || 0) + 1;
+                if (!personalGroups[key]) {
+                    personalGroups[key] = [];
+                }
+                personalGroups[key].push(msg);
             }
+        });
+        // Ambil info sender untuk personal messages
+        const senderUids = Object.keys(personalGroups).map(k => {
+            const firstMsg = personalGroups[k][0];
+            return firstMsg.getDataValue('senderUid');
+        });
+        const sendersMap = {};
+        if (senderUids.length > 0) {
+            const senders = await models_1.User.findAll({
+                where: { uid: senderUids },
+                attributes: ['uid', 'name', 'foto', 'photoUrl'],
+            });
+            senders.forEach((s) => {
+                sendersMap[s.getDataValue('uid')] = s.toJSON();
+            });
+        }
+        Object.keys(personalGroups).forEach(key => {
+            const msgs = personalGroups[key];
+            const latestMsg = msgs[0];
+            const sUid = latestMsg.getDataValue('senderUid');
+            const senderUser = sendersMap[sUid];
+            let sName = latestMsg.getDataValue('senderName') || senderUser?.name || 'Warga';
+            if (sUid === 'SUPER_ADMIN') {
+                sName = 'Appsbee Support (Super Admin)';
+            }
+            details.push({
+                type: 'PERSONAL',
+                roomId: latestMsg.getDataValue('roomId') || key,
+                senderUid: sUid,
+                senderName: sName,
+                senderPhoto: senderUser?.foto || senderUser?.photoUrl || '',
+                message: latestMsg.getDataValue('message') || 'Pesan baru',
+                unreadCount: msgs.length,
+                createdAt: latestMsg.getDataValue('createdAt'),
+            });
         });
         // 2. Pesan Grup Unread (berdasarkan GroupReadState per user)
         const currentUser = await models_1.User.findOne({ where: { uid }, attributes: ['villageId'] });
@@ -270,20 +329,49 @@ const getUnreadCounts = async (req, res) => {
         readStates.forEach((rs) => {
             readStateMap[rs.getDataValue('roomId')] = new Date(rs.getDataValue('lastReadAt'));
         });
+        const { Village } = require('../models');
+        let villageName = '';
+        if (userVillageId) {
+            const v = await Village.findByPk(userVillageId);
+            if (v)
+                villageName = v.name;
+        }
         for (const roomId of userGroupRooms) {
             const lastReadAt = readStateMap[roomId] || new Date(0);
-            const unreadCount = await models_1.ChatMessage.count({
+            const unreadGroupMsgs = await models_1.ChatMessage.findAll({
                 where: {
                     roomId,
                     senderUid: { [sequelize_1.Op.ne]: uid },
                     createdAt: { [sequelize_1.Op.gt]: lastReadAt },
                 },
+                order: [['createdAt', 'DESC']],
             });
-            if (unreadCount > 0) {
-                counts[roomId] = unreadCount;
+            if (unreadGroupMsgs.length > 0) {
+                counts[roomId] = unreadGroupMsgs.length;
+                const latestMsg = unreadGroupMsgs[0];
+                const groupDisplayName = roomId === 'GROUP_ADMINS'
+                    ? 'Grup Admin Pusat'
+                    : (villageName ? `Grup Warga - ${villageName}` : 'Grup Warga RT');
+                const lastSender = latestMsg.getDataValue('senderName') || 'Warga';
+                details.push({
+                    type: 'GROUP',
+                    roomId,
+                    senderUid: latestMsg.getDataValue('senderUid'),
+                    senderName: groupDisplayName,
+                    lastSenderName: lastSender,
+                    message: `${lastSender}: ${latestMsg.getDataValue('message') || ''}`,
+                    unreadCount: unreadGroupMsgs.length,
+                    createdAt: latestMsg.getDataValue('createdAt'),
+                });
             }
         }
-        res.json({ success: true, data: counts });
+        // Urutkan details dari yang paling baru
+        details.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        res.json({
+            success: true,
+            data: counts,
+            details,
+        });
     }
     catch (error) {
         res.status(500).json({ success: false, message: error.message });
