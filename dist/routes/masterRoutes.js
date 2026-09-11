@@ -20,6 +20,7 @@ router.post('/users/family', masterController_1.saveUserFamily);
 router.post('/users/link-account', masterController_1.linkUserAccount);
 router.post('/users/bulk-import', masterController_1.bulkImportUsers);
 router.delete('/users/family/:familyId', masterController_1.deleteUserFamily);
+router.post('/users/:uid/move-family', masterController_1.moveUserFamily);
 router.put('/users/:uid/fcm-token', masterController_1.updateFcmToken);
 router.delete('/users/:uid/fcm-token', masterController_1.removeFcmToken);
 router.put('/users/:uid/online-status', masterController_1.updateOnlineStatus);

@@ -5,7 +5,7 @@ import {
   updateFcmToken, removeFcmToken, updateOnlineStatus, updateUserRoles,
   getMenus, updateMenu, deleteMenu,
   getSlides, createSlide, updateSlide, deleteSlide,
-  bulkImportUsers
+  bulkImportUsers, moveUserFamily
 } from '../controllers/masterController';
 import { checkSubscription } from '../middlewares/saasMiddleware';
 
@@ -28,6 +28,7 @@ router.post('/users/family', saveUserFamily);
 router.post('/users/link-account', linkUserAccount);
 router.post('/users/bulk-import', bulkImportUsers);
 router.delete('/users/family/:familyId', deleteUserFamily);
+router.post('/users/:uid/move-family', moveUserFamily);
 router.put('/users/:uid/fcm-token', updateFcmToken);
 router.delete('/users/:uid/fcm-token', removeFcmToken);
 router.put('/users/:uid/online-status', updateOnlineStatus);

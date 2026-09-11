@@ -1,4 +1,4 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { Op } from 'sequelize';
 import { Village, User, Menu, Slide, Role, UserRole, Tariff, sequelize, SubscriptionPlan, VillageSubscription, ChatMessage, DuesJournal, JimpitanHistory } from '../models';
 import { v4 as uuidv4 } from 'uuid';
@@ -291,37 +291,170 @@ export const getUsers = async (req: Request, res: Response): Promise<void> => {
 export const deleteUserFamily = async (req: Request, res: Response): Promise<void> => {
   try {
     const { familyId } = req.params;
-    const { villageId } = req.body;
+    const villageId = req.body?.villageId || req.query?.villageId;
+    const noKK = req.body?.noKK || req.query?.noKK;
 
-    // SECURITY FIX: Tambah filter villageId agar tidak bisa hapus warga desa lain
-    const whereClause: any = {
-      [Op.or]: [
-        { familyId },
-        { uid: familyId }
-      ]
-    };
-    if (villageId) {
-      whereClause.villageId = villageId;
-    }
+    // 1. Cari data awal untuk mendeteksi nomor KK dan familyId yang berelasi
+    const initialUsers = await User.findAll({
+      where: {
+        [Op.or]: [
+          { familyId },
+          { uid: familyId },
+          ...(noKK ? [{ noKK: (noKK as string).trim() }] : [])
+        ],
+        ...(villageId ? { villageId } : {})
+      }
+    });
 
-    // Logging sebelum delete untuk audit trail
-    const toDelete = await User.findAll({ where: whereClause });
-    if (toDelete.length === 0) {
+    if (initialUsers.length === 0) {
       res.status(404).json({ success: false, message: 'Data keluarga tidak ditemukan atau bukan milik desa ini' });
       return;
     }
-    console.log(`[deleteUserFamily] Menghapus ${toDelete.length} user (familyId=${familyId}, villageId=${villageId}): ${toDelete.map((u: any) => `${u.getDataValue('uid')}(${u.getDataValue('name')})`).join(', ')}`);
+
+    const foundUids = new Set<string>();
+    const foundFamilyIds = new Set<string>();
+    const foundNoKKs = new Set<string>();
+
+    initialUsers.forEach((u: any) => {
+      const uid = u.getDataValue('uid');
+      const famId = u.getDataValue('familyId');
+      const kk = u.getDataValue('noKK');
+      if (uid) foundUids.add(uid);
+      if (famId && famId.trim().length > 0) foundFamilyIds.add(famId.trim());
+      if (kk && kk.trim().length > 3) foundNoKKs.add(kk.trim());
+    });
+
+    const orConditions: any[] = [
+      { uid: Array.from(foundUids) },
+      ...(foundFamilyIds.size > 0 ? [{ familyId: Array.from(foundFamilyIds) }] : []),
+      ...(foundNoKKs.size > 0 ? [{ noKK: Array.from(foundNoKKs) }] : [])
+    ];
+
+    const targetVillageId = villageId || initialUsers[0]?.getDataValue('villageId');
+    const whereClause: any = {
+      [Op.or]: orConditions,
+      ...(targetVillageId ? { villageId: targetVillageId } : {})
+    };
+
+    const toDelete = await User.findAll({ where: whereClause });
+    console.log(`[deleteUserFamily] Menghapus ${toDelete.length} user (familyId=${familyId}, villageId=${targetVillageId}): ${toDelete.map((u: any) => `${u.getDataValue('uid')}(${u.getDataValue('name')})`).join(', ')}`);
+
+    const deletedUids = toDelete.map((u: any) => u.getDataValue('uid'));
+    if (deletedUids.length > 0) {
+      await Role.destroy({ where: { userId: deletedUids } });
+    }
 
     await User.destroy({ where: whereClause });
 
     const firebaseService = require('../services/firebaseService');
     try {
-      firebaseService.sendSyncNotification(villageId || 'all', 'REFRESH_USERS');
+      firebaseService.sendSyncNotification(targetVillageId || 'all', 'REFRESH_USERS');
     } catch (e) {
       console.error('Failed to send sync notification:', e);
     }
     res.json({ success: true, message: 'Family or user deleted' });
   } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const moveUserFamily = async (req: Request, res: Response): Promise<void> => {
+  const transaction = await sequelize.transaction();
+  try {
+    const { uid } = req.params;
+    const { 
+      action, // 'JOIN_EXISTING' or 'SPLIT_NEW'
+      targetFamilyId,
+      targetUid,
+      statusHubungan,
+      newNoKK,
+      newAddress,
+      newUniqueCode,
+      villageId
+    } = req.body;
+
+    const user = await User.findByPk(uid as string, { transaction });
+    if (!user) {
+      await transaction.rollback();
+      res.status(404).json({ success: false, message: 'Warga tidak ditemukan' });
+      return;
+    }
+
+    const currentVillageId = villageId || user.getDataValue('villageId');
+
+    if (action === 'JOIN_EXISTING') {
+      const targetQuery = targetFamilyId || targetUid;
+      if (!targetQuery) {
+        await transaction.rollback();
+        res.status(400).json({ success: false, message: 'Target KK tujuan tidak ditentukan' });
+        return;
+      }
+
+      const targetUser = await User.findOne({
+        where: {
+          [Op.or]: [
+            { familyId: targetQuery },
+            { uid: targetQuery }
+          ],
+          ...(currentVillageId ? { villageId: currentVillageId } : {})
+        },
+        transaction
+      });
+
+      if (!targetUser) {
+        await transaction.rollback();
+        res.status(404).json({ success: false, message: 'KK tujuan tidak ditemukan' });
+        return;
+      }
+
+      const finalFamilyId = targetUser.getDataValue('familyId') || targetUser.getDataValue('uid');
+      const finalNoKK = targetUser.getDataValue('noKK') || '';
+      const finalAlamat = targetUser.getDataValue('alamat') || targetUser.getDataValue('address') || '';
+      const finalUniqueCode = targetUser.getDataValue('uniqueCode') || '';
+
+      await user.update({
+        familyId: finalFamilyId,
+        noKK: finalNoKK,
+        alamat: finalAlamat,
+        uniqueCode: finalUniqueCode,
+        statusHubungan: statusHubungan || 'Anggota Keluarga'
+      }, { transaction });
+
+    } else if (action === 'SPLIT_NEW') {
+      const newFamilyId = `FAM-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      
+      let finalCode = newUniqueCode;
+      if (!finalCode) {
+        const village = currentVillageId ? await Village.findByPk(currentVillageId, { transaction }) : null;
+        const villageCode = (village as any)?.code || '';
+        finalCode = villageCode ? `${villageCode}${Math.floor(Math.random() * 900) + 100}` : `${Math.floor(Math.random() * 90000000) + 10000000}`;
+      }
+
+      await user.update({
+        familyId: newFamilyId,
+        noKK: newNoKK ? newNoKK.trim() : (user.getDataValue('noKK') || ''),
+        alamat: newAddress ? newAddress.trim() : (user.getDataValue('alamat') || user.getDataValue('address') || ''),
+        uniqueCode: finalCode,
+        statusHubungan: statusHubungan || 'Kepala Keluarga'
+      }, { transaction });
+    } else {
+      await transaction.rollback();
+      res.status(400).json({ success: false, message: 'Aksi pindah KK tidak valid' });
+      return;
+    }
+
+    await transaction.commit();
+
+    try {
+      const firebaseService = require('../services/firebaseService');
+      firebaseService.sendSyncNotification(currentVillageId || 'all', 'REFRESH_USERS');
+    } catch (e) {
+      console.error('Failed to send sync notification:', e);
+    }
+
+    res.json({ success: true, message: 'Berhasil memproses mutasi / pindah KK warga' });
+  } catch (error: any) {
+    await transaction.rollback();
     res.status(500).json({ success: false, message: error.message });
   }
 };
