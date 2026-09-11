@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.bulkImportUsers = exports.updateOnlineStatus = exports.removeFcmToken = exports.updateFcmToken = exports.deleteSlide = exports.updateSlide = exports.createSlide = exports.getSlides = exports.deleteMenu = exports.updateMenu = exports.getMenus = exports.linkUserAccount = exports.updateUserRoles = exports.updateUserStatus = exports.getUserById = exports.saveUserFamily = exports.moveUserFamily = exports.deleteUserFamily = exports.getUsers = exports.registerVillage = exports.deleteVillage = exports.updateVillage = exports.createVillage = exports.getVillageById = exports.getVillages = void 0;
+exports.bulkImportUsers = exports.updateOnlineStatus = exports.removeFcmToken = exports.updateFcmToken = exports.deleteSlide = exports.updateSlide = exports.createSlide = exports.getSlides = exports.deleteMenu = exports.updateMenu = exports.getMenus = exports.linkUserAccount = exports.updateUserRoles = exports.updateUserStatus = exports.getUserById = exports.saveUserFamily = exports.moveUserFamily = exports.deleteUserFamily = exports.getUsers = exports.registerVillage = exports.deleteVillage = exports.updateVillage = exports.createVillage = exports.generateResidentUniqueCode = exports.getVillageById = exports.getVillages = void 0;
 const sequelize_1 = require("sequelize");
 const models_1 = require("../models");
 const uuid_1 = require("uuid");
@@ -77,6 +77,27 @@ const generateDefaultVillageConfig = async (existingConfig) => {
         menuPermissions
     };
 };
+const generateResidentUniqueCode = async (transaction) => {
+    const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    let isUnique = false;
+    let code = '';
+    while (!isUnique) {
+        let suffix = '';
+        for (let i = 0; i < 7; i++) {
+            suffix += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        code = `JMP${suffix}`;
+        const existing = await models_1.User.findOne({
+            where: { uniqueCode: code },
+            transaction
+        });
+        if (!existing) {
+            isUnique = true;
+        }
+    }
+    return code;
+};
+exports.generateResidentUniqueCode = generateResidentUniqueCode;
 const createVillage = async (req, res) => {
     try {
         const id = req.body.id || `village_${(0, uuid_1.v4)().substring(0, 8)}`;
@@ -389,11 +410,26 @@ const moveUserFamily = async (req, res) => {
         }
         else if (action === 'SPLIT_NEW') {
             const newFamilyId = `FAM-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-            let finalCode = newUniqueCode;
+            let finalCode = newUniqueCode ? newUniqueCode.trim().toUpperCase() : '';
             if (!finalCode) {
-                const village = currentVillageId ? await models_1.Village.findByPk(currentVillageId, { transaction }) : null;
-                const villageCode = village?.code || '';
-                finalCode = villageCode ? `${villageCode}${Math.floor(Math.random() * 900) + 100}` : `${Math.floor(Math.random() * 90000000) + 10000000}`;
+                finalCode = await (0, exports.generateResidentUniqueCode)(transaction);
+            }
+            else {
+                const existingWithCode = await models_1.User.findOne({
+                    where: {
+                        uniqueCode: finalCode,
+                        uid: { [sequelize_1.Op.ne]: uid }
+                    },
+                    transaction
+                });
+                if (existingWithCode) {
+                    await transaction.rollback();
+                    res.status(400).json({
+                        success: false,
+                        message: `Kode unik ${finalCode} sudah digunakan oleh warga lain.`
+                    });
+                    return;
+                }
             }
             await user.update({
                 familyId: newFamilyId,

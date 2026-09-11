@@ -79,6 +79,29 @@ const generateDefaultVillageConfig = async (existingConfig?: any) => {
   };
 };
 
+export const generateResidentUniqueCode = async (transaction?: any): Promise<string> => {
+  const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let isUnique = false;
+  let code = '';
+  
+  while (!isUnique) {
+    let suffix = '';
+    for (let i = 0; i < 7; i++) {
+      suffix += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    code = `JMP${suffix}`;
+    
+    const existing = await User.findOne({
+      where: { uniqueCode: code },
+      transaction
+    });
+    if (!existing) {
+      isUnique = true;
+    }
+  }
+  return code;
+};
+
 export const createVillage = async (req: Request, res: Response): Promise<void> => {
   try {
     const id = req.body.id || `village_${uuidv4().substring(0, 8)}`;
@@ -423,11 +446,25 @@ export const moveUserFamily = async (req: Request, res: Response): Promise<void>
     } else if (action === 'SPLIT_NEW') {
       const newFamilyId = `FAM-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
       
-      let finalCode = newUniqueCode;
+      let finalCode = newUniqueCode ? newUniqueCode.trim().toUpperCase() : '';
       if (!finalCode) {
-        const village = currentVillageId ? await Village.findByPk(currentVillageId, { transaction }) : null;
-        const villageCode = (village as any)?.code || '';
-        finalCode = villageCode ? `${villageCode}${Math.floor(Math.random() * 900) + 100}` : `${Math.floor(Math.random() * 90000000) + 10000000}`;
+        finalCode = await generateResidentUniqueCode(transaction);
+      } else {
+        const existingWithCode = await User.findOne({
+          where: {
+            uniqueCode: finalCode,
+            uid: { [Op.ne]: uid }
+          },
+          transaction
+        });
+        if (existingWithCode) {
+          await transaction.rollback();
+          res.status(400).json({
+            success: false,
+            message: `Kode unik ${finalCode} sudah digunakan oleh warga lain.`
+          });
+          return;
+        }
       }
 
       await user.update({
