@@ -8,7 +8,7 @@ const models_1 = require("../models");
  */
 const getAppVersion = async (req, res) => {
     try {
-        const keys = ['latestVersion', 'minVersion', 'forceUpdate', 'updateUrl', 'releaseNotes', 'showNotification', 'showUpdateNotification'];
+        const keys = ['latestVersion', 'minVersion', 'forceUpdate', 'updateUrl', 'updateUrlLegacy', 'releaseNotes', 'showNotification', 'showUpdateNotification'];
         const settings = await models_1.SystemSetting.findAll({ where: { key: keys } });
         // Convert array to object
         const config = {};
@@ -26,6 +26,7 @@ const getAppVersion = async (req, res) => {
             minVersion: config.minVersion || '1.0.0',
             forceUpdate: config.forceUpdate === 'true' || config.forceUpdate === '1',
             updateUrl: config.updateUrl || 'https://play.google.com/store/apps/details?id=com.appsbeem.jimpitan',
+            updateUrlLegacy: config.updateUrlLegacy || '',
             releaseNotes: config.releaseNotes || 'Perbaikan bug dan peningkatan performa.',
             showNotification: showNotif,
             showUpdateNotification: showNotif,
@@ -47,13 +48,14 @@ exports.getAppVersion = getAppVersion;
  */
 const updateAppVersion = async (req, res) => {
     try {
-        const { latestVersion, minVersion, forceUpdate, updateUrl, releaseNotes, showNotification, showUpdateNotification } = req.body;
+        const { latestVersion, minVersion, forceUpdate, updateUrl, updateUrlLegacy, releaseNotes, showNotification, showUpdateNotification } = req.body;
         const notifVal = showNotification !== undefined ? showNotification : showUpdateNotification;
         const updates = [
             { key: 'latestVersion', value: latestVersion },
             { key: 'minVersion', value: minVersion },
             { key: 'forceUpdate', value: forceUpdate !== undefined ? (forceUpdate ? 'true' : 'false') : undefined },
             { key: 'updateUrl', value: updateUrl },
+            { key: 'updateUrlLegacy', value: updateUrlLegacy },
             { key: 'releaseNotes', value: releaseNotes },
             { key: 'showNotification', value: notifVal !== undefined ? (notifVal ? 'true' : 'false') : undefined },
             { key: 'showUpdateNotification', value: notifVal !== undefined ? (notifVal ? 'true' : 'false') : undefined },
