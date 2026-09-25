@@ -22,7 +22,7 @@ const getAppVersion = async (req, res) => {
                 : true);
         // Default values if missing
         const data = {
-            latestVersion: config.latestVersion || '1.9.4',
+            latestVersion: config.latestVersion || '1.10.0',
             minVersion: config.minVersion || '1.0.0',
             forceUpdate: config.forceUpdate === 'true' || config.forceUpdate === '1',
             updateUrl: config.updateUrl || 'https://play.google.com/store/apps/details?id=com.appsbeem.jimpitan',

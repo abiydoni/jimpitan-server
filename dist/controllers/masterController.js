@@ -4,6 +4,7 @@ exports.bulkImportUsers = exports.updateOnlineStatus = exports.removeFcmToken = 
 const sequelize_1 = require("sequelize");
 const models_1 = require("../models");
 const uuid_1 = require("uuid");
+const jakartaTime_1 = require("../utils/jakartaTime");
 // Villages
 const getVillages = async (req, res) => {
     try {
@@ -151,7 +152,7 @@ exports.deleteVillage = deleteVillage;
 const registerVillage = async (req, res) => {
     const transaction = await models_1.sequelize.transaction();
     try {
-        const { uid, name, email, photoUrl, villageName, address, rtRw } = req.body;
+        const { uid, name, email, photoUrl, villageName, address, rtRw, noKK, nik, phone, phoneNumber } = req.body;
         // 1. Generate random 5 digit code (Hanya Angka)
         const chars = '0123456789';
         let villageCode = '';
@@ -171,6 +172,7 @@ const registerVillage = async (req, res) => {
         const sanitizedEmail = (typeof email === 'string' && email.trim().length > 0)
             ? email.trim()
             : null;
+        const finalPhone = (phone || phoneNumber) ? String(phone || phoneNumber).trim() : null;
         // 3. Setup user as ADMIN for the new village
         const [user, created] = await models_1.User.findOrCreate({
             where: { uid },
@@ -179,6 +181,9 @@ const registerVillage = async (req, res) => {
                 name: name || 'Admin Desa',
                 email: sanitizedEmail,
                 photoUrl: photoUrl || '',
+                noKK: noKK ? String(noKK).trim() : null,
+                nik: nik ? String(nik).trim() : null,
+                phoneNumber: finalPhone,
                 status: 'ACTIVE',
                 villageId
             },
@@ -189,7 +194,10 @@ const registerVillage = async (req, res) => {
                 status: 'ACTIVE',
                 villageId,
                 ...(name ? { name } : {}),
-                ...(sanitizedEmail ? { email: sanitizedEmail } : {})
+                ...(sanitizedEmail ? { email: sanitizedEmail } : {}),
+                ...(noKK ? { noKK: String(noKK).trim() } : {}),
+                ...(nik ? { nik: String(nik).trim() } : {}),
+                ...(finalPhone ? { phoneNumber: finalPhone } : {})
             }, { transaction });
         }
         // Assign Role ADMIN_DESA
@@ -234,13 +242,15 @@ const registerVillage = async (req, res) => {
             value: 'Lihat Detail',
             villageId
         }, { transaction });
-        // 6. Setup 14-days Free Trial Subscription
+        // 6. Setup 1-Month Free Trial Subscription
         let plan = await models_1.SubscriptionPlan.findOne({ where: { name: 'Free Trial' }, transaction });
         if (!plan) {
             plan = await models_1.SubscriptionPlan.create({
                 name: 'Free Trial',
                 basePrice: 0,
                 pricePerKk: 0,
+                durationMonths: 1,
+                durationUnit: 'MONTHLY'
             }, { transaction });
         }
         await models_1.VillageSubscription.create({
@@ -248,7 +258,7 @@ const registerVillage = async (req, res) => {
             planId: plan.id,
             status: 'ACTIVE',
             startDate: new Date(),
-            endDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // + 14 days
+            endDate: (0, jakartaTime_1.addJakartaMonths)(new Date(), 1), // 1 month free trial
             autoRenew: false
         }, { transaction });
         await transaction.commit();

@@ -240,6 +240,18 @@ export const orderPlan = async (req: Request, res: Response): Promise<void> => {
     const plan = await SubscriptionPlan.findByPk(planId);
     if (!plan) { res.status(404).json({ success: false, message: 'Plan not found' }); return; }
 
+    const isTrialPlan = plan.getDataValue('name')?.toLowerCase().includes('trial') || (Number(plan.getDataValue('basePrice')) === 0 && Number(plan.getDataValue('pricePerKk')) === 0);
+    if (isTrialPlan) {
+      const existingSub = await VillageSubscription.findOne({ where: { villageId: villageId as string } });
+      if (existingSub) {
+        res.status(400).json({
+          success: false,
+          message: 'Paket Uji Coba Gratis (Trial 1 Bulan) hanya berlaku satu kali saat pendaftaran awal. Silakan pilih salah satu paket berbayar untuk melanjutkan layanan.'
+        });
+        return;
+      }
+    }
+
     const village = await Village.findByPk(villageId as string);
     if (!village) { res.status(404).json({ success: false, message: 'Village not found' }); return; }
 

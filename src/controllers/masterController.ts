@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Op } from 'sequelize';
 import { Village, User, Menu, Slide, Role, UserRole, Tariff, sequelize, SubscriptionPlan, VillageSubscription, ChatMessage, DuesJournal, JimpitanHistory } from '../models';
 import { v4 as uuidv4 } from 'uuid';
+import { addJakartaMonths } from '../utils/jakartaTime';
 
 // Villages
 export const getVillages = async (req: Request, res: Response): Promise<void> => {
@@ -153,7 +154,7 @@ export const deleteVillage = async (req: Request, res: Response): Promise<void> 
 export const registerVillage = async (req: Request, res: Response): Promise<void> => {
   const transaction = await sequelize.transaction();
   try {
-    const { uid, name, email, photoUrl, villageName, address, rtRw } = req.body;
+    const { uid, name, email, photoUrl, villageName, address, rtRw, noKK, nik, phone, phoneNumber } = req.body;
 
     // 1. Generate random 5 digit code (Hanya Angka)
     const chars = '0123456789';
@@ -178,6 +179,8 @@ export const registerVillage = async (req: Request, res: Response): Promise<void
       ? email.trim()
       : null;
 
+    const finalPhone = (phone || phoneNumber) ? String(phone || phoneNumber).trim() : null;
+
     // 3. Setup user as ADMIN for the new village
     const [user, created] = await User.findOrCreate({
       where: { uid },
@@ -186,6 +189,9 @@ export const registerVillage = async (req: Request, res: Response): Promise<void
         name: name || 'Admin Desa',
         email: sanitizedEmail,
         photoUrl: photoUrl || '',
+        noKK: noKK ? String(noKK).trim() : null,
+        nik: nik ? String(nik).trim() : null,
+        phoneNumber: finalPhone,
         status: 'ACTIVE',
         villageId
       },
@@ -197,7 +203,10 @@ export const registerVillage = async (req: Request, res: Response): Promise<void
         status: 'ACTIVE',
         villageId,
         ...(name ? { name } : {}),
-        ...(sanitizedEmail ? { email: sanitizedEmail } : {})
+        ...(sanitizedEmail ? { email: sanitizedEmail } : {}),
+        ...(noKK ? { noKK: String(noKK).trim() } : {}),
+        ...(nik ? { nik: String(nik).trim() } : {}),
+        ...(finalPhone ? { phoneNumber: finalPhone } : {})
       }, { transaction });
     }
 
@@ -248,13 +257,15 @@ export const registerVillage = async (req: Request, res: Response): Promise<void
       villageId
     }, { transaction });
 
-    // 6. Setup 14-days Free Trial Subscription
+    // 6. Setup 1-Month Free Trial Subscription
     let plan = await SubscriptionPlan.findOne({ where: { name: 'Free Trial' }, transaction });
     if (!plan) {
       plan = await SubscriptionPlan.create({
         name: 'Free Trial',
         basePrice: 0,
         pricePerKk: 0,
+        durationMonths: 1,
+        durationUnit: 'MONTHLY'
       }, { transaction });
     }
     
@@ -263,7 +274,7 @@ export const registerVillage = async (req: Request, res: Response): Promise<void
       planId: (plan as any).id,
       status: 'ACTIVE',
       startDate: new Date(),
-      endDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // + 14 days
+      endDate: addJakartaMonths(new Date(), 1), // 1 month free trial
       autoRenew: false
     }, { transaction });
 
