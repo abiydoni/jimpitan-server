@@ -63,6 +63,30 @@ const connectDB = async () => {
             }
             catch (e) { }
             try {
+                await exports.sequelize.query("CREATE TABLE IF NOT EXISTS `wa_blast_history` (`id` VARCHAR(128) NOT NULL PRIMARY KEY, `villageId` VARCHAR(128) NULL, `title` VARCHAR(255) NOT NULL, `message` TEXT NOT NULL, `targetFilter` VARCHAR(100) DEFAULT 'ALL_KK', `totalTarget` INT DEFAULT 0, `successCount` INT DEFAULT 0, `failedCount` INT DEFAULT 0, `details` JSON NULL, `sentBy` VARCHAR(255) NULL, `createdAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, `updatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+            }
+            catch (e) { }
+            try {
+                await exports.sequelize.query("INSERT INTO system_settings (`key`, `value`, `description`, `createdAt`, `updatedAt`) VALUES ('WA_GATEWAY_PROVIDER', 'appsbee', 'Provider WhatsApp Gateway (appsbee, fonnte, wablas, starsender, whacenter, generic)', NOW(), NOW()) ON DUPLICATE KEY UPDATE `value` = IF(`value` IS NULL OR `value` = '' OR `value` = 'fonnte', 'appsbee', `value`);");
+            }
+            catch (e) { }
+            try {
+                await exports.sequelize.query("INSERT INTO system_settings (`key`, `value`, `description`, `createdAt`, `updatedAt`) VALUES ('WA_API_KEY', 'wa-69aa3dbf930020c93f34b83add6374e8', 'API Key / Token WhatsApp Gateway', NOW(), NOW()) ON DUPLICATE KEY UPDATE `value` = IF(`value` IS NULL OR `value` = '', 'wa-69aa3dbf930020c93f34b83add6374e8', `value`);");
+            }
+            catch (e) { }
+            try {
+                await exports.sequelize.query("INSERT INTO system_settings (`key`, `value`, `description`, `createdAt`, `updatedAt`) VALUES ('WA_API_URL', 'https://wa-ab.appsbee.my.id/api/send-message', 'Endpoint URL WhatsApp Gateway', NOW(), NOW()) ON DUPLICATE KEY UPDATE `value` = IF(`value` IS NULL OR `value` = '', 'https://wa-ab.appsbee.my.id/api/send-message', `value`);");
+            }
+            catch (e) { }
+            try {
+                await exports.sequelize.query("INSERT INTO system_settings (`key`, `value`, `description`, `createdAt`, `updatedAt`) VALUES ('WA_SENDER_NUMBER', 'appsbee', 'Session ID / Device ID WhatsApp Gateway', NOW(), NOW()) ON DUPLICATE KEY UPDATE `value` = IF(`value` IS NULL OR `value` = '', 'appsbee', `value`);");
+            }
+            catch (e) { }
+            try {
+                await exports.sequelize.query("INSERT IGNORE INTO system_settings (`key`, `value`, `description`, `createdAt`, `updatedAt`) VALUES ('WA_DEFAULT_DELAY_SEC', '2', 'Delay jeda antar kirim pesan WhatsApp (detik)', NOW(), NOW());");
+            }
+            catch (e) { }
+            try {
                 await exports.sequelize.query("INSERT IGNORE INTO system_settings (`key`, `value`, `description`, `createdAt`, `updatedAt`) VALUES ('TAX_PERCENTAGE', '10', 'Persentase Pajak (PPN) Tagihan', NOW(), NOW());");
             }
             catch (e) { }

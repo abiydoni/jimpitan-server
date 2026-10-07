@@ -380,4 +380,36 @@ DuesJournal.belongsTo(Village, { foreignKey: 'villageId' });
 Village.hasMany(JimpitanHistory, { foreignKey: 'villageId' });
 JimpitanHistory.belongsTo(Village, { foreignKey: 'villageId' });
 
+// ---------------------------
+// 11. Model WaBlastHistory (Riwayat Blasting WA)
+// ---------------------------
+export class WaBlastHistory extends Model {
+  declare id: string;
+  declare villageId: string | null;
+  declare title: string;
+  declare message: string;
+  declare targetFilter: string;
+  declare totalTarget: number;
+  declare successCount: number;
+  declare failedCount: number;
+  declare details: any;
+  declare sentBy: string | null;
+}
+WaBlastHistory.init({
+  id: { type: DataTypes.STRING(128), primaryKey: true, defaultValue: DataTypes.UUIDV4 },
+  villageId: { type: DataTypes.STRING(128), allowNull: true },
+  title: { type: DataTypes.STRING(255), allowNull: false },
+  message: { type: DataTypes.TEXT, allowNull: false },
+  targetFilter: { type: DataTypes.STRING(100), defaultValue: 'ALL_KK' },
+  totalTarget: { type: DataTypes.INTEGER, defaultValue: 0 },
+  successCount: { type: DataTypes.INTEGER, defaultValue: 0 },
+  failedCount: { type: DataTypes.INTEGER, defaultValue: 0 },
+  details: { type: DataTypes.JSON, allowNull: true },
+  sentBy: { type: DataTypes.STRING(255), allowNull: true },
+}, { sequelize, modelName: 'waBlastHistory', tableName: 'wa_blast_history', timestamps: true });
+
+// WaBlastHistory milik Village
+Village.hasMany(WaBlastHistory, { foreignKey: 'villageId', constraints: false });
+WaBlastHistory.belongsTo(Village, { foreignKey: 'villageId', constraints: false });
+
 export { sequelize };

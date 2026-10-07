@@ -17,6 +17,7 @@ import saasRoutes from './routes/saasRoutes';
 import monitorRoutes from './routes/monitorRoutes';
 import configRoutes from './routes/configRoutes';
 import securityRoutes from './routes/securityRoutes';
+import waRoutes from './routes/waRoutes';
 import path from 'path';
 import { initSaasCronJobs } from './cron/saasJobs';
 import { addStartupLog } from './utils/startupLogs';
@@ -79,6 +80,7 @@ app.use('/api/config', configRoutes);
 app.use('/api/saas', saasRoutes);
 app.use('/api/server', monitorRoutes);
 app.use('/api/security', securityRoutes);
+app.use('/api/wa', waRoutes);
 
 // Endpoint sederhana untuk testing (Sekarang dilayani oleh public/index.html)
 // app.get('/', (req, res) => {

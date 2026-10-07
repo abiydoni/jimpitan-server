@@ -14,7 +14,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sequelize = exports.SystemSetting = exports.JimpitanHistory = exports.DuesJournal = exports.InventoryLoan = exports.InventoryItem = exports.Exemption = exports.Tariff = exports.Schedule = exports.Slide = exports.GroupReadState = exports.ChatMessage = exports.Menu = exports.UserRole = exports.Role = exports.User = exports.Village = void 0;
+exports.sequelize = exports.WaBlastHistory = exports.SystemSetting = exports.JimpitanHistory = exports.DuesJournal = exports.InventoryLoan = exports.InventoryItem = exports.Exemption = exports.Tariff = exports.Schedule = exports.Slide = exports.GroupReadState = exports.ChatMessage = exports.Menu = exports.UserRole = exports.Role = exports.User = exports.Village = void 0;
 const sequelize_1 = require("sequelize");
 const database_1 = require("../config/database");
 Object.defineProperty(exports, "sequelize", { enumerable: true, get: function () { return database_1.sequelize; } });
@@ -345,3 +345,24 @@ DuesJournal.belongsTo(Village, { foreignKey: 'villageId' });
 // JimpitanHistory milik Village
 Village.hasMany(JimpitanHistory, { foreignKey: 'villageId' });
 JimpitanHistory.belongsTo(Village, { foreignKey: 'villageId' });
+// ---------------------------
+// 11. Model WaBlastHistory (Riwayat Blasting WA)
+// ---------------------------
+class WaBlastHistory extends sequelize_1.Model {
+}
+exports.WaBlastHistory = WaBlastHistory;
+WaBlastHistory.init({
+    id: { type: sequelize_1.DataTypes.STRING(128), primaryKey: true, defaultValue: sequelize_1.DataTypes.UUIDV4 },
+    villageId: { type: sequelize_1.DataTypes.STRING(128), allowNull: true },
+    title: { type: sequelize_1.DataTypes.STRING(255), allowNull: false },
+    message: { type: sequelize_1.DataTypes.TEXT, allowNull: false },
+    targetFilter: { type: sequelize_1.DataTypes.STRING(100), defaultValue: 'ALL_KK' },
+    totalTarget: { type: sequelize_1.DataTypes.INTEGER, defaultValue: 0 },
+    successCount: { type: sequelize_1.DataTypes.INTEGER, defaultValue: 0 },
+    failedCount: { type: sequelize_1.DataTypes.INTEGER, defaultValue: 0 },
+    details: { type: sequelize_1.DataTypes.JSON, allowNull: true },
+    sentBy: { type: sequelize_1.DataTypes.STRING(255), allowNull: true },
+}, { sequelize: database_1.sequelize, modelName: 'waBlastHistory', tableName: 'wa_blast_history', timestamps: true });
+// WaBlastHistory milik Village
+Village.hasMany(WaBlastHistory, { foreignKey: 'villageId', constraints: false });
+WaBlastHistory.belongsTo(Village, { foreignKey: 'villageId', constraints: false });
