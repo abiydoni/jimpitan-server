@@ -66,6 +66,8 @@ const getOrCreateFolder = async (folderName, parentFolderId) => {
 exports.getOrCreateFolder = getOrCreateFolder;
 /**
  * Mengunggah file ke Google Drive (ke dalam folder tertentu).
+ * Jika file dengan nama yang sama sudah ada di folder tersebut (misal backup di tanggal yang sama),
+ * file akan diperbarui (update) dan duplikat lama akan dibersihkan agar tidak double di GDrive.
  * @param filePath Path lokal ke file yang akan diunggah
  * @param folderId ID Folder Google Drive tujuan
  * @param customFileName (Opsional) Nama file custom saat diunggah
@@ -77,15 +79,51 @@ const uploadFileToDrive = async (filePath, folderId, customFileName) => {
     }
     const drive = getDriveService();
     const fileName = customFileName || path_1.default.basename(filePath);
-    const fileMetadata = {
-        name: fileName,
-        parents: [folderId], // Upload ke dalam folder ini
-    };
     const media = {
         mimeType: 'application/sql',
         body: fs_1.default.createReadStream(filePath),
     };
     try {
+        // 1. Cek apakah file dengan nama yang sama sudah ada di folder tujuan (hindari file double di tanggal yang sama)
+        const existingRes = await drive.files.list({
+            q: `name = '${fileName}' and '${folderId}' in parents and trashed = false`,
+            fields: 'files(id, name)',
+            spaces: 'drive',
+            supportsAllDrives: true,
+            includeItemsFromAllDrives: true,
+        });
+        const existingFiles = existingRes.data.files || [];
+        if (existingFiles.length > 0) {
+            const primaryFile = existingFiles[0];
+            console.log(`ℹ️ File "${fileName}" sudah ada di GDrive (ID: ${primaryFile.id}). Memperbarui konten file...`);
+            const response = await drive.files.update({
+                fileId: primaryFile.id,
+                media: media,
+                fields: 'id, name, webViewLink',
+                supportsAllDrives: true,
+            });
+            // Jika ada lebih dari satu file dengan nama yang sama (duplikat dari backup sebelumnya), bersihkan sisanya
+            if (existingFiles.length > 1) {
+                for (let i = 1; i < existingFiles.length; i++) {
+                    try {
+                        await drive.files.delete({
+                            fileId: existingFiles[i].id,
+                            supportsAllDrives: true,
+                        });
+                        console.log(`🧹 Duplikat lama dibersihkan: ${fileName} (${existingFiles[i].id})`);
+                    }
+                    catch (delErr) {
+                        console.warn(`⚠️ Gagal menghapus file duplikat lama:`, delErr);
+                    }
+                }
+            }
+            return response.data;
+        }
+        // 2. Jika belum ada, buat file baru
+        const fileMetadata = {
+            name: fileName,
+            parents: [folderId], // Upload ke dalam folder ini
+        };
         const response = await drive.files.create({
             requestBody: fileMetadata,
             media: media,

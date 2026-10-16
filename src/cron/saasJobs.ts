@@ -7,13 +7,16 @@ import { generateDatabaseBackup } from '../utils/dbBackup';
 import { uploadFileToDrive, getOrCreateFolder } from '../services/gdriveService';
 import fs from 'fs';
 
+// Flag untuk mencegah eksekusi ganda bersamaan (misal jika ada multi-worker Passenger atau server restart)
+let isBackupRunning = false;
+
 // Fungsi untuk menjadwalkan semua tugas latar belakang SaaS
 export const initSaasCronJobs = () => {
-  addStartupLog('✅ Cron Jobs SaaS diinisialisasi (Berjalan setiap jam 00:00)');
+  addStartupLog('✅ Cron Jobs SaaS diinisialisasi (Berjalan setiap jam 00:00 & 02:00 WIB)');
 
-  // Jadwal: Setiap hari jam 00:00
+  // Jadwal: Setiap hari jam 00:00 WIB
   cron.schedule('0 0 * * *', async () => {
-    console.log('⏳ Memulai eksekusi Cron Jobs harian SaaS...');
+    console.log('⏳ Memulai eksekusi Cron Jobs harian SaaS (00:00 WIB)...');
     
     try {
       await generateInvoices();
@@ -22,11 +25,19 @@ export const initSaasCronJobs = () => {
     } catch (error) {
       console.error('❌ Gagal mengeksekusi Cron Jobs SaaS:', error);
     }
+  }, {
+    timezone: 'Asia/Jakarta'
   });
 
   // Jadwal: Setiap hari jam 02:00 pagi WIB untuk Auto-Backup Google Drive
   cron.schedule('0 2 * * *', async () => {
-    console.log('⏳ Memulai eksekusi Auto-Backup Google Drive (Jam 02:00)...');
+    if (isBackupRunning) {
+      console.log('⚠️ Auto-Backup dilewati: proses backup sebelumnya masih berjalan.');
+      return;
+    }
+
+    isBackupRunning = true;
+    console.log('⏳ Memulai eksekusi Auto-Backup Google Drive (Jam 02:00 WIB)...');
     try {
       const gdriveFolderId = process.env.GDRIVE_FOLDER_ID;
       if (!gdriveFolderId || gdriveFolderId === 'xxxxxx') {
@@ -34,14 +45,14 @@ export const initSaasCronJobs = () => {
         return;
       }
 
-      // Buat format bulan-tahun (misal: "Agustus-2026")
-      const currentMonthYear = new Date().toLocaleString('id-ID', { month: 'long', year: 'numeric' }).replace(/ /g, '-');
+      // Buat format bulan-tahun (misal: "Agustus-2026") waktu Asia/Jakarta (WIB)
+      const currentMonthYear = new Date().toLocaleString('id-ID', { month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' }).replace(/ /g, '-');
       
       // Dapatkan atau buat sub-folder untuk bulan ini
       const targetFolderId = await getOrCreateFolder(currentMonthYear, gdriveFolderId);
 
-      // Buat format tanggal (misal: "05-Agustus-2026")
-      const currentDate = new Date().toLocaleString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }).replace(/ /g, '-');
+      // Buat format tanggal (misal: "05-Agustus-2026") waktu Asia/Jakarta (WIB)
+      const currentDate = new Date().toLocaleString('id-ID', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' }).replace(/ /g, '-');
       const customFileName = `jimpitan-${currentDate}.sql`;
 
       // 1. Buat file .sql secara lokal
@@ -61,7 +72,11 @@ export const initSaasCronJobs = () => {
       }
     } catch (error) {
       console.error('❌ Gagal melakukan Auto-Backup Google Drive:', error);
+    } finally {
+      isBackupRunning = false;
     }
+  }, {
+    timezone: 'Asia/Jakarta'
   });
 };
 

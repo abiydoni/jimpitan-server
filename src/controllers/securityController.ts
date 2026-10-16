@@ -36,17 +36,20 @@ export const triggerGDriveBackup = async (req: Request, res: Response): Promise<
       return;
     }
 
-    const currentMonthYear = new Date().toLocaleString('id-ID', { month: 'long', year: 'numeric' }).replace(/ /g, '-');
+    const currentMonthYear = new Date().toLocaleString('id-ID', { month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' }).replace(/ /g, '-');
     const targetFolderId = await getOrCreateFolder(currentMonthYear, gdriveFolderId);
 
-    const currentDate = new Date().toLocaleString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }).replace(/ /g, '-');
+    const currentDate = new Date().toLocaleString('id-ID', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' }).replace(/ /g, '-');
     const customFileName = `jimpitan-${currentDate}.sql`;
 
     const sqlFilePath = await generateDatabaseBackup();
-    const uploadResult = await uploadFileToDrive(sqlFilePath, targetFolderId, customFileName);
-
-    if (fs.existsSync(sqlFilePath)) {
-      fs.unlinkSync(sqlFilePath);
+    let uploadResult;
+    try {
+      uploadResult = await uploadFileToDrive(sqlFilePath, targetFolderId, customFileName);
+    } finally {
+      if (fs.existsSync(sqlFilePath)) {
+        fs.unlinkSync(sqlFilePath);
+      }
     }
 
     res.json({

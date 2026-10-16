@@ -37,14 +37,19 @@ const triggerGDriveBackup = async (req, res) => {
             res.status(400).json({ success: false, message: 'GDRIVE_FOLDER_ID belum dikonfigurasi di environment (.env).' });
             return;
         }
-        const currentMonthYear = new Date().toLocaleString('id-ID', { month: 'long', year: 'numeric' }).replace(/ /g, '-');
+        const currentMonthYear = new Date().toLocaleString('id-ID', { month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' }).replace(/ /g, '-');
         const targetFolderId = await (0, gdriveService_1.getOrCreateFolder)(currentMonthYear, gdriveFolderId);
-        const currentDate = new Date().toLocaleString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }).replace(/ /g, '-');
+        const currentDate = new Date().toLocaleString('id-ID', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' }).replace(/ /g, '-');
         const customFileName = `jimpitan-${currentDate}.sql`;
         const sqlFilePath = await (0, dbBackup_1.generateDatabaseBackup)();
-        const uploadResult = await (0, gdriveService_1.uploadFileToDrive)(sqlFilePath, targetFolderId, customFileName);
-        if (fs_1.default.existsSync(sqlFilePath)) {
-            fs_1.default.unlinkSync(sqlFilePath);
+        let uploadResult;
+        try {
+            uploadResult = await (0, gdriveService_1.uploadFileToDrive)(sqlFilePath, targetFolderId, customFileName);
+        }
+        finally {
+            if (fs_1.default.existsSync(sqlFilePath)) {
+                fs_1.default.unlinkSync(sqlFilePath);
+            }
         }
         res.json({
             success: true,
