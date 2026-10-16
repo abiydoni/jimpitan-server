@@ -276,33 +276,110 @@ const getUsersByVillage = async (req, res) => {
     }
 };
 exports.getUsersByVillage = getUsersByVillage;
+/**
+ * Memeriksa kemiripan dua nama (case-insensitive, mengabaikan tanda baca/gelar).
+ * Mengembalikan true jika ada kesamaan kata bermakna atau kemiripan string >= 70%.
+ */
+function isNameSimilar(nameA, nameB) {
+    if (!nameA || !nameB)
+        return false;
+    const normalize = (str) => str
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const cleanA = normalize(nameA);
+    const cleanB = normalize(nameB);
+    if (cleanA === cleanB)
+        return true;
+    if (cleanA.includes(cleanB) || cleanB.includes(cleanA))
+        return true;
+    // Cek kata kunci bermakna (abaikan gelar/singkatan pendek)
+    const ignoreWords = new Set(['m', 'h', 'hj', 'haji', 'raden', 'dra', 'drs', 'dr', 'ir', 'st', 'se', 'sh', 'spd', 'skom']);
+    const tokensA = cleanA.split(' ').filter(w => w.length > 2 && !ignoreWords.has(w));
+    const tokensB = cleanB.split(' ').filter(w => w.length > 2 && !ignoreWords.has(w));
+    if (tokensA.length === 0 || tokensB.length === 0) {
+        const rawA = cleanA.split(' ');
+        const rawB = cleanB.split(' ');
+        return rawA.some(t => rawB.includes(t));
+    }
+    // Jika ada minimal 1 kata kunci yang sama persis
+    if (tokensA.some(t => tokensB.includes(t)))
+        return true;
+    // Deteksi typo ringan (misal 'Achmad Subagyo' vs 'Ahmad Subagyo')
+    const distance = levenshteinDistance(cleanA, cleanB);
+    const maxLen = Math.max(cleanA.length, cleanB.length);
+    const similarity = 1 - distance / maxLen;
+    return similarity >= 0.65;
+}
+function levenshteinDistance(a, b) {
+    const matrix = [];
+    for (let i = 0; i <= b.length; i++)
+        matrix[i] = [i];
+    for (let j = 0; j <= a.length; j++)
+        matrix[0][j] = j;
+    for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+            if (b.charAt(i - 1) === a.charAt(j - 1)) {
+                matrix[i][j] = matrix[i - 1][j - 1];
+            }
+            else {
+                matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j] + 1);
+            }
+        }
+    }
+    return matrix[b.length][a.length];
+}
 const claimAccount = async (req, res) => {
     try {
         const { uid, email, name, nik, villageId } = req.body;
         const firebaseUser = req.firebaseUser;
         if (!uid || !email || !nik || !villageId) {
-            res.status(400).json({ success: false, message: 'Missing required fields' });
+            res.status(400).json({ success: false, message: 'UID, Email, NIK, dan Village ID wajib diisi' });
             return;
         }
         if (firebaseUser && firebaseUser.uid !== uid) {
             res.status(403).json({ success: false, message: 'UID tidak sesuai dengan token autentikasi' });
             return;
         }
-        const existingBulkUser = await models_1.User.findOne({ where: { nik, villageId } });
+        const cleanNik = String(nik).trim();
+        const existingBulkUser = await models_1.User.findOne({ where: { nik: cleanNik, villageId } });
         if (!existingBulkUser) {
-            res.status(404).json({ success: false, message: 'Data dengan NIK tersebut tidak ditemukan di desa ini' });
+            res.status(404).json({
+                success: false,
+                message: `Data dengan NIK "${cleanNik}" tidak ditemukan di desa ini. Pastikan NIK sudah didaftarkan RT atau kosongkan NIK untuk mendaftar sebagai warga baru.`
+            });
+            return;
+        }
+        // Validasi kemiripan nama untuk menanggulangi salah ketik NIK orang lain
+        const registeredName = (existingBulkUser.getDataValue('name') || '').toString().trim();
+        const inputName = (name || '').toString().trim();
+        if (inputName && registeredName && !isNameSimilar(inputName, registeredName)) {
+            res.status(400).json({
+                success: false,
+                message: `NIK ${cleanNik} terdaftar atas nama "${registeredName}", yang tidak cocok dengan nama "${inputName}". Periksa kembali NIK yang Anda masukkan.`
+            });
             return;
         }
         const oldUid = existingBulkUser.getDataValue('uid');
         if (oldUid !== uid) {
-            const { ChatMessage } = await Promise.resolve().then(() => __importStar(require('../models')));
+            const { ChatMessage, DuesJournal, JimpitanHistory } = await Promise.resolve().then(() => __importStar(require('../models')));
             await models_1.Role.update({ userId: uid }, { where: { userId: oldUid } });
             try {
                 await ChatMessage.update({ senderUid: uid }, { where: { senderUid: oldUid } });
                 await ChatMessage.update({ receiverUid: uid }, { where: { receiverUid: oldUid } });
             }
             catch {
-                // Abaikan jika model ChatMessage belum terdefinisi atau ada error
+                // Abaikan jika error
+            }
+            // Update referensi kartu keluarga dan iuran
+            try {
+                await models_1.User.update({ familyId: uid }, { where: { familyId: oldUid } });
+                await DuesJournal.update({ kkId: uid }, { where: { kkId: oldUid } });
+                await JimpitanHistory.update({ kkId: uid }, { where: { kkId: oldUid } });
+            }
+            catch {
+                // Abaikan jika error
             }
             const tempUser = await models_1.User.findByPk(uid);
             if (tempUser) {
@@ -314,7 +391,6 @@ const claimAccount = async (req, res) => {
                     await models_1.User.destroy({ where: { uid } });
                 }
                 else {
-                    // Ini warga aktif dari desa lain - JANGAN dihapus, batalkan proses klaim
                     console.warn(`[claimAccount] DIBATALKAN: uid=${uid} sudah merupakan warga aktif desa ${tempVillageId}, tidak dapat diklaim`);
                     res.status(409).json({
                         success: false,
@@ -326,12 +402,20 @@ const claimAccount = async (req, res) => {
             await models_1.User.update({
                 uid,
                 email,
-                name: name || existingBulkUser.getDataValue('name'),
+                name: inputName || registeredName,
                 status: 'ACTIVE',
             }, { where: { uid: oldUid } });
         }
         else {
             await models_1.User.update({ email, status: 'ACTIVE' }, { where: { uid } });
+        }
+        // Kirim notifikasi sync ke admin
+        try {
+            const firebaseService = require('../services/firebaseService');
+            firebaseService.sendSyncNotification(villageId, 'REFRESH_USERS');
+        }
+        catch {
+            // Abaikan jika error
         }
         const claimedUser = await models_1.User.findByPk(uid, {
             include: [
@@ -340,7 +424,7 @@ const claimAccount = async (req, res) => {
         });
         res.json({
             success: true,
-            message: 'Account successfully claimed',
+            message: 'Akun berhasil disinkronkan langsung dengan data warga Anda!',
             data: claimedUser ? formatUserWithRoles(claimedUser) : null,
         });
     }
