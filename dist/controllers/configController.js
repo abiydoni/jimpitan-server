@@ -20,12 +20,16 @@ const getAppVersion = async (req, res) => {
             : (config.showUpdateNotification !== undefined
                 ? (config.showUpdateNotification === 'true' || config.showUpdateNotification === '1')
                 : true);
+        let updateUrl = config.updateUrl || 'https://play.google.com/store/apps/details?id=jimpitan.appsbee.my.id';
+        if (!updateUrl || updateUrl.includes('com.appsbeem.jimpitan')) {
+            updateUrl = 'https://play.google.com/store/apps/details?id=jimpitan.appsbee.my.id';
+        }
         // Default values if missing
         const data = {
-            latestVersion: config.latestVersion || '1.10.0',
+            latestVersion: config.latestVersion || '1.10.2',
             minVersion: config.minVersion || '1.0.0',
             forceUpdate: config.forceUpdate === 'true' || config.forceUpdate === '1',
-            updateUrl: config.updateUrl || 'https://play.google.com/store/apps/details?id=com.appsbeem.jimpitan',
+            updateUrl: updateUrl,
             updateUrlLegacy: config.updateUrlLegacy || '',
             releaseNotes: config.releaseNotes || 'Perbaikan bug dan peningkatan performa.',
             showNotification: showNotif,
