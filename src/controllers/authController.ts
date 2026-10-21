@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { Op } from 'sequelize';
 import { User, Role, Village } from '../models';
 import { AuthRequest } from '../middlewares/authMiddleware';
 
@@ -209,6 +210,44 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
     const { roles, villageId } = req.body;
 
     let user = await User.findByPk(uid as string);
+
+    // 1. Cek apakah akun ini sudah aktif di desa sebelumnya
+    if (user) {
+      const currentVillageId = user.getDataValue('villageId');
+      const currentStatus = user.getDataValue('status');
+      if (villageId && currentVillageId && currentVillageId !== villageId && currentStatus === 'ACTIVE') {
+        const currentVillage = await Village.findByPk(currentVillageId);
+        const villageName = currentVillage ? currentVillage.getDataValue('name') : 'desa sebelumnya';
+        res.status(400).json({
+          success: false,
+          code: 'ALREADY_IN_OTHER_VILLAGE',
+          message: `Akun Google Anda sudah terdaftar sebagai warga aktif di ${villageName}. Anda tidak dapat bergabung ke desa baru.`
+        });
+        return;
+      }
+    }
+
+    // 2. Cek apakah NIK yang dimasukkan sudah terdaftar di desa lain
+    const cleanNik = req.body.nik ? String(req.body.nik).trim() : null;
+    if (cleanNik && villageId) {
+      const userWithSameNik = await User.findOne({
+        where: {
+          nik: cleanNik,
+          villageId: { [Op.ne]: villageId }
+        }
+      });
+      if (userWithSameNik) {
+        const otherVillage = await Village.findByPk(userWithSameNik.getDataValue('villageId'));
+        const otherVillageName = otherVillage ? otherVillage.getDataValue('name') : 'desa lain';
+        res.status(400).json({
+          success: false,
+          code: 'ALREADY_IN_OTHER_VILLAGE',
+          message: `NIK ${cleanNik} sudah terdaftar sebagai warga di ${otherVillageName}. Anda tidak dapat bergabung ke desa baru.`
+        });
+        return;
+      }
+    }
+
     if (!user) {
       // Jika user belum ada di database (karena deferred creation saat loginSync),
       // buat user baru jika villageId valid disediakan (misal dari JoinVillagePage)
@@ -403,6 +442,25 @@ export const claimAccount = async (req: Request, res: Response): Promise<void> =
     const existingBulkUser = await User.findOne({ where: { nik: cleanNik, villageId } });
 
     if (!existingBulkUser) {
+      // Cek apakah NIK ini sudah terdaftar di desa lain
+      const userInOtherVillage = await User.findOne({
+        where: {
+          nik: cleanNik,
+          villageId: { [Op.ne]: villageId }
+        }
+      });
+
+      if (userInOtherVillage) {
+        const otherVillage = await Village.findByPk(userInOtherVillage.getDataValue('villageId'));
+        const otherVillageName = otherVillage ? otherVillage.getDataValue('name') : 'desa lain';
+        res.status(400).json({
+          success: false,
+          code: 'ALREADY_IN_OTHER_VILLAGE',
+          message: `NIK ${cleanNik} sudah terdaftar sebagai warga di ${otherVillageName}. Anda tidak dapat bergabung ke desa baru.`
+        });
+        return;
+      }
+
       res.status(404).json({
         success: false,
         message: `Data dengan NIK "${cleanNik}" tidak ditemukan di desa ini. Pastikan NIK sudah didaftarkan RT atau kosongkan NIK untuk mendaftar sebagai warga baru.`
@@ -453,13 +511,18 @@ export const claimAccount = async (req: Request, res: Response): Promise<void> =
         if (tempStatus === 'INCOMPLETE' || !tempVillageId) {
           console.log(`[claimAccount] Menghapus user sementara uid=${uid} (status=${tempStatus}, villageId=${tempVillageId})`);
           await User.destroy({ where: { uid } });
-        } else {
+        } else if (tempVillageId !== villageId && tempStatus === 'ACTIVE') {
+          const otherVillage = await Village.findByPk(tempVillageId);
+          const otherVillageName = otherVillage ? otherVillage.getDataValue('name') : 'desa lain';
           console.warn(`[claimAccount] DIBATALKAN: uid=${uid} sudah merupakan warga aktif desa ${tempVillageId}, tidak dapat diklaim`);
           res.status(409).json({ 
             success: false, 
-            message: 'Akun Google ini sudah terdaftar sebagai warga aktif di desa lain. Hubungi admin desa untuk bantuan.' 
+            code: 'ALREADY_IN_OTHER_VILLAGE',
+            message: `Akun Google ini sudah terdaftar sebagai warga aktif di ${otherVillageName}. Anda tidak dapat bergabung ke desa baru.` 
           });
           return;
+        } else {
+          await User.destroy({ where: { uid } });
         }
       }
 
