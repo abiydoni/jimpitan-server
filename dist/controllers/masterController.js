@@ -141,8 +141,88 @@ const deleteVillage = async (req, res) => {
             res.status(404).json({ success: false, message: 'Village not found' });
             return;
         }
-        await village.destroy();
-        res.json({ success: true, message: 'Village deleted successfully' });
+        const villageUniqueCode = village.uniqueCode;
+        // Cari semua UID user yang terikat ke desa ini (baik via villageId maupun uniqueCode)
+        const villageUsers = await models_1.User.findAll({
+            where: {
+                [sequelize_1.Op.or]: [
+                    { villageId: id },
+                    ...(villageUniqueCode ? [{ uniqueCode: villageUniqueCode }] : [])
+                ]
+            },
+            attributes: ['uid']
+        });
+        const userUids = villageUsers.map((u) => u.uid).filter(Boolean);
+        await models_1.sequelize.transaction(async (t) => {
+            // 1. Group Read States
+            await models_1.GroupReadState.destroy({
+                where: {
+                    [sequelize_1.Op.or]: [
+                        { roomId: `GROUP_${id}` },
+                        ...(userUids.length > 0 ? [{ userId: { [sequelize_1.Op.in]: userUids } }] : [])
+                    ]
+                },
+                transaction: t
+            });
+            // 2. Chat Messages
+            await models_1.ChatMessage.destroy({
+                where: {
+                    [sequelize_1.Op.or]: [
+                        { villageId: id },
+                        { roomId: `GROUP_${id}` },
+                        ...(userUids.length > 0 ? [
+                            { senderUid: { [sequelize_1.Op.in]: userUids } },
+                            { receiverUid: { [sequelize_1.Op.in]: userUids } }
+                        ] : [])
+                    ]
+                },
+                transaction: t
+            });
+            // 3. Jimpitan History
+            await models_1.JimpitanHistory.destroy({ where: { villageId: id }, transaction: t });
+            // 4. Dues Journal
+            await models_1.DuesJournal.destroy({ where: { villageId: id }, transaction: t });
+            // 5. Inventory Loans & Items
+            await models_1.InventoryLoan.destroy({ where: { villageId: id }, transaction: t });
+            await models_1.InventoryItem.destroy({ where: { villageId: id }, transaction: t });
+            // 6. Exemptions & Tariffs
+            await models_1.Exemption.destroy({ where: { villageId: id }, transaction: t });
+            await models_1.Tariff.destroy({ where: { villageId: id }, transaction: t });
+            // 7. Schedules
+            await models_1.Schedule.destroy({ where: { villageId: id }, transaction: t });
+            // 8. Slides
+            await models_1.Slide.destroy({ where: { villageId: id }, transaction: t });
+            // 9. Menus
+            await models_1.Menu.destroy({ where: { villageId: id }, transaction: t });
+            // 10. Roles
+            await models_1.Role.destroy({
+                where: {
+                    [sequelize_1.Op.or]: [
+                        { villageId: id },
+                        ...(userUids.length > 0 ? [{ userId: { [sequelize_1.Op.in]: userUids } }] : [])
+                    ]
+                },
+                transaction: t
+            });
+            // 11. SaaS Invoices & Village Subscriptions
+            await models_1.Invoice.destroy({ where: { villageId: id }, transaction: t });
+            await models_1.VillageSubscription.destroy({ where: { villageId: id }, transaction: t });
+            // 12. WA Blast History
+            await models_1.WaBlastHistory.destroy({ where: { villageId: id }, transaction: t });
+            // 13. Users
+            await models_1.User.destroy({
+                where: {
+                    [sequelize_1.Op.or]: [
+                        { villageId: id },
+                        ...(villageUniqueCode ? [{ uniqueCode: villageUniqueCode }] : [])
+                    ]
+                },
+                transaction: t
+            });
+            // 14. Village
+            await village.destroy({ transaction: t });
+        });
+        res.json({ success: true, message: 'Village and all associated data deleted successfully' });
     }
     catch (error) {
         res.status(500).json({ success: false, message: error.message });

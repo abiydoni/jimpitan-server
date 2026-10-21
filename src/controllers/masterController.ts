@@ -1,6 +1,10 @@
 import { Request, Response } from 'express';
 import { Op } from 'sequelize';
-import { Village, User, Menu, Slide, Role, UserRole, Tariff, sequelize, SubscriptionPlan, VillageSubscription, ChatMessage, DuesJournal, JimpitanHistory } from '../models';
+import { 
+  Village, User, Menu, Slide, Role, UserRole, Tariff, sequelize, 
+  SubscriptionPlan, VillageSubscription, ChatMessage, DuesJournal, JimpitanHistory,
+  GroupReadState, Schedule, Exemption, InventoryItem, InventoryLoan, Invoice, WaBlastHistory
+} from '../models';
 import { v4 as uuidv4 } from 'uuid';
 import { addJakartaMonths } from '../utils/jakartaTime';
 
@@ -144,8 +148,105 @@ export const deleteVillage = async (req: Request, res: Response): Promise<void> 
       res.status(404).json({ success: false, message: 'Village not found' });
       return;
     }
-    await village.destroy();
-    res.json({ success: true, message: 'Village deleted successfully' });
+
+    const villageUniqueCode = (village as any).uniqueCode;
+
+    // Cari semua UID user yang terikat ke desa ini (baik via villageId maupun uniqueCode)
+    const villageUsers = await User.findAll({
+      where: {
+        [Op.or]: [
+          { villageId: id },
+          ...(villageUniqueCode ? [{ uniqueCode: villageUniqueCode }] : [])
+        ]
+      },
+      attributes: ['uid']
+    });
+    const userUids = villageUsers.map((u: any) => u.uid).filter(Boolean);
+
+    await sequelize.transaction(async (t) => {
+      // 1. Group Read States
+      await GroupReadState.destroy({
+        where: {
+          [Op.or]: [
+            { roomId: `GROUP_${id}` },
+            ...(userUids.length > 0 ? [{ userId: { [Op.in]: userUids } }] : [])
+          ]
+        },
+        transaction: t
+      });
+
+      // 2. Chat Messages
+      await ChatMessage.destroy({
+        where: {
+          [Op.or]: [
+            { villageId: id },
+            { roomId: `GROUP_${id}` },
+            ...(userUids.length > 0 ? [
+              { senderUid: { [Op.in]: userUids } },
+              { receiverUid: { [Op.in]: userUids } }
+            ] : [])
+          ]
+        },
+        transaction: t
+      });
+
+      // 3. Jimpitan History
+      await JimpitanHistory.destroy({ where: { villageId: id }, transaction: t });
+
+      // 4. Dues Journal
+      await DuesJournal.destroy({ where: { villageId: id }, transaction: t });
+
+      // 5. Inventory Loans & Items
+      await InventoryLoan.destroy({ where: { villageId: id }, transaction: t });
+      await InventoryItem.destroy({ where: { villageId: id }, transaction: t });
+
+      // 6. Exemptions & Tariffs
+      await Exemption.destroy({ where: { villageId: id }, transaction: t });
+      await Tariff.destroy({ where: { villageId: id }, transaction: t });
+
+      // 7. Schedules
+      await Schedule.destroy({ where: { villageId: id }, transaction: t });
+
+      // 8. Slides
+      await Slide.destroy({ where: { villageId: id }, transaction: t });
+
+      // 9. Menus
+      await Menu.destroy({ where: { villageId: id }, transaction: t });
+
+      // 10. Roles
+      await Role.destroy({
+        where: {
+          [Op.or]: [
+            { villageId: id },
+            ...(userUids.length > 0 ? [{ userId: { [Op.in]: userUids } }] : [])
+          ]
+        },
+        transaction: t
+      });
+
+      // 11. SaaS Invoices & Village Subscriptions
+      await Invoice.destroy({ where: { villageId: id }, transaction: t });
+      await VillageSubscription.destroy({ where: { villageId: id }, transaction: t });
+
+      // 12. WA Blast History
+      await WaBlastHistory.destroy({ where: { villageId: id }, transaction: t });
+
+      // 13. Users
+      await User.destroy({
+        where: {
+          [Op.or]: [
+            { villageId: id },
+            ...(villageUniqueCode ? [{ uniqueCode: villageUniqueCode }] : [])
+          ]
+        },
+        transaction: t
+      });
+
+      // 14. Village
+      await village.destroy({ transaction: t });
+    });
+
+    res.json({ success: true, message: 'Village and all associated data deleted successfully' });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
