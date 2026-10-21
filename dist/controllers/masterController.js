@@ -308,7 +308,7 @@ const registerVillage = async (req, res) => {
         const sanitizedEmail = (typeof email === 'string' && email.trim().length > 0)
             ? email.trim()
             : null;
-        // 3. Setup user as ADMIN for the new village
+        // 3. Setup user as ADMIN and Family Head for the new village
         const [user, created] = await models_1.User.findOrCreate({
             where: { uid },
             defaults: {
@@ -319,6 +319,8 @@ const registerVillage = async (req, res) => {
                 noKK: noKK ? String(noKK).trim() : null,
                 nik: nik ? String(nik).trim() : null,
                 phoneNumber: finalPhone,
+                familyId: uid,
+                statusHubungan: 'KEPALA_KELUARGA',
                 status: 'ACTIVE',
                 villageId
             },
@@ -328,6 +330,8 @@ const registerVillage = async (req, res) => {
             await user.update({
                 status: 'ACTIVE',
                 villageId,
+                familyId: user.getDataValue('familyId') || uid,
+                statusHubungan: user.getDataValue('statusHubungan') || 'KEPALA_KELUARGA',
                 ...(name ? { name } : {}),
                 ...(sanitizedEmail ? { email: sanitizedEmail } : {}),
                 ...(noKK ? { noKK: String(noKK).trim() } : {}),
@@ -335,11 +339,17 @@ const registerVillage = async (req, res) => {
                 ...(finalPhone ? { phoneNumber: finalPhone } : {})
             }, { transaction });
         }
-        // Assign Role ADMIN_DESA
+        // Assign Role ADMIN_DESA and WARGA for this user
         await models_1.Role.destroy({ where: { userId: uid }, transaction });
         await models_1.Role.create({
             id: `role_${uid}_ADMIN_DESA_${Date.now()}`,
             name: 'ADMIN_DESA',
+            userId: uid,
+            villageId
+        }, { transaction });
+        await models_1.Role.create({
+            id: `role_${uid}_WARGA_${Date.now() + 1}`,
+            name: 'WARGA',
             userId: uid,
             villageId
         }, { transaction });
@@ -441,6 +451,9 @@ const getUsers = async (req, res) => {
                     userJSON.isOnline = false;
                     staleOnlineUids.push(userJSON.uid);
                 }
+            }
+            if (!userJSON.familyId && userJSON.villageId) {
+                userJSON.familyId = userJSON.uid;
             }
             return userJSON;
         });
@@ -801,9 +814,39 @@ const getUserById = async (req, res) => {
             res.status(404).json({ success: false, message: 'User not found' });
             return;
         }
+        // Auto-heal: Jika user memiliki villageId namun familyId masih kosong, otomatis jadikan Kepala Keluarga (familyId = uid)
+        if (user.getDataValue('villageId') && (!user.getDataValue('familyId') || user.getDataValue('familyId') === '')) {
+            const fallbackFamilyId = user.getDataValue('uid');
+            const fallbackStatus = user.getDataValue('statusHubungan') || 'KEPALA_KELUARGA';
+            await user.update({
+                familyId: fallbackFamilyId,
+                statusHubungan: fallbackStatus
+            });
+            user.setDataValue('familyId', fallbackFamilyId);
+            user.setDataValue('statusHubungan', fallbackStatus);
+            // Pastikan juga role WARGA ada untuk keperluan iuran/tagihan
+            const hasWarga = user.roles?.some((r) => r.name === 'WARGA');
+            if (!hasWarga) {
+                try {
+                    await models_1.Role.create({
+                        id: `role_${uid}_WARGA_${Date.now()}`,
+                        name: 'WARGA',
+                        userId: uid,
+                        villageId: user.getDataValue('villageId')
+                    });
+                    if (user.roles) {
+                        user.roles.push({ id: `role_${uid}_WARGA_${Date.now()}`, name: 'WARGA', villageId: user.getDataValue('villageId') });
+                    }
+                }
+                catch (_) { }
+            }
+        }
         const userJSON = user.toJSON();
         if (userJSON.roles) {
             userJSON.roles = userJSON.roles.map((r) => r.name).filter((val, idx, arr) => arr.indexOf(val) === idx);
+        }
+        if (!userJSON.familyId && userJSON.villageId) {
+            userJSON.familyId = userJSON.uid;
         }
         res.json({ success: true, data: userJSON });
     }
