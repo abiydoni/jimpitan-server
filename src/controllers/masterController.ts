@@ -835,6 +835,64 @@ export const getUserById = async (req: Request, res: Response): Promise<void> =>
   }
 };
 
+export const cleanupIncompleteUsers = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const orphanUsers = await User.findAll({
+      where: {
+        status: 'INCOMPLETE',
+        [Op.or]: [
+          { villageId: null },
+          { villageId: '' },
+          { villageId: '-' },
+        ]
+      },
+      attributes: ['uid']
+    });
+
+    const uids = orphanUsers.map(u => u.getDataValue('uid'));
+
+    if (uids.length === 0) {
+      res.json({ success: true, message: 'Tidak ada akun incomplete yang perlu dibersihkan', count: 0 });
+      return;
+    }
+
+    await Role.destroy({ where: { userId: uids } });
+    const deletedCount = await User.destroy({ where: { uid: uids } });
+
+    res.json({
+      success: true,
+      message: `Berhasil membersihkan ${deletedCount} akun incomplete`,
+      count: deletedCount,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const deleteUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { uid } = req.params;
+    const user = await User.findByPk(uid as string);
+    if (!user) {
+      res.status(404).json({ success: false, message: 'User tidak ditemukan' });
+      return;
+    }
+
+    const email = user.getDataValue('email');
+    if (email === (process.env.SUPERADMIN_EMAIL || 'appsbeem@gmail.com')) {
+      res.status(403).json({ success: false, message: 'Tidak dapat menghapus akun Super Admin' });
+      return;
+    }
+
+    await Role.destroy({ where: { userId: uid } });
+    await User.destroy({ where: { uid } });
+
+    res.json({ success: true, message: 'User berhasil dihapus' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export const updateUserStatus = async (req: Request, res: Response): Promise<void> => {
   try {
     const { uid } = req.params;

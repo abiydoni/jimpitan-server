@@ -126,21 +126,15 @@ export const loginSync = async (req: Request, res: Response): Promise<void> => {
 
         user = await User.findByPk(uid);
       } else {
-        let status = 'INCOMPLETE';
-
         if (email === superAdminEmail()) {
-          status = 'ACTIVE';
-        }
+          user = await User.create({
+            uid,
+            name: name || 'Superadmin appsbee',
+            email,
+            photoUrl: photoUrl || '',
+            status: 'ACTIVE',
+          });
 
-        user = await User.create({
-          uid,
-          name: name || (email === superAdminEmail() ? 'Superadmin appsbee' : ''),
-          email,
-          photoUrl: photoUrl || '',
-          status,
-        });
-
-        if (email === superAdminEmail()) {
           const existingRole = await Role.findOne({ where: { userId: uid, name: 'SUPER_ADMIN' } });
           if (!existingRole) {
             await Role.create({
@@ -150,6 +144,15 @@ export const loginSync = async (req: Request, res: Response): Promise<void> => {
               villageId: null,
             });
           }
+        } else {
+          // Jangan buat record di database jika user baru dan belum memilih/memasukkan kode desa valid.
+          // Kembalikan null data sehingga Flutter AuthWrapper langsung mengarahkan ke JoinVillagePage / VillageRegistrationPage
+          res.status(200).json({
+            success: true,
+            message: 'User authenticated, pending village selection',
+            data: null,
+          });
+          return;
         }
       }
     }
@@ -205,9 +208,47 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
     const { uid } = req.params;
     const { roles, villageId } = req.body;
 
-    const user = await User.findByPk(uid as string);
+    let user = await User.findByPk(uid as string);
     if (!user) {
-      res.status(404).json({ success: false, message: 'User not found' });
+      // Jika user belum ada di database (karena deferred creation saat loginSync),
+      // buat user baru jika villageId valid disediakan (misal dari JoinVillagePage)
+      if (!villageId) {
+        res.status(404).json({ success: false, message: 'User not found' });
+        return;
+      }
+
+      const village = await Village.findByPk(villageId);
+      if (!village) {
+        res.status(404).json({ success: false, message: 'Desa tidak ditemukan' });
+        return;
+      }
+
+      const updateData = pickProfileFields(req.body);
+      user = await User.create({
+        uid: uid as string,
+        name: (updateData.name as string) || (req.body.name as string) || '',
+        email: (updateData.email as string) || (req.body.email as string) || '',
+        photoUrl: (updateData.photoUrl as string) || (req.body.photoUrl as string) || '',
+        status: 'PENDING',
+        villageId,
+        noKK: (updateData.noKK as string) || (req.body.noKK as string) || null,
+        nik: (updateData.nik as string) || (req.body.nik as string) || null,
+        phoneNumber: (updateData.phoneNumber as string) || (req.body.phoneNumber as string) || null,
+      });
+
+      await assignRoles(uid as string, ['WARGA'], villageId);
+
+      const createdUser = await User.findByPk(uid as string, {
+        include: [
+          { model: Role, as: 'roles', attributes: ['id', 'name', 'villageId'] },
+        ],
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Profile created and pending approval',
+        data: createdUser ? formatUserWithRoles(createdUser) : user,
+      });
       return;
     }
 

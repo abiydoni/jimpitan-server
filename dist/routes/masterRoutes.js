@@ -14,8 +14,10 @@ router.put('/villages/:id', masterController_1.updateVillage);
 router.delete('/villages/:id', masterController_1.deleteVillage);
 // Users
 router.get('/users', masterController_1.getUsers);
+router.delete('/users/cleanup-incomplete', masterController_1.cleanupIncompleteUsers);
 router.get('/users/:uid', masterController_1.getUserById);
 router.put('/users/:uid', masterController_1.updateUserStatus);
+router.delete('/users/:uid', masterController_1.deleteUser);
 router.post('/users/family', masterController_1.saveUserFamily);
 router.post('/users/link-account', masterController_1.linkUserAccount);
 router.post('/users/bulk-import', masterController_1.bulkImportUsers);

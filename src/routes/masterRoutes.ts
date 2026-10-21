@@ -5,7 +5,7 @@ import {
   updateFcmToken, removeFcmToken, updateOnlineStatus, updateUserRoles,
   getMenus, updateMenu, deleteMenu,
   getSlides, createSlide, updateSlide, deleteSlide,
-  bulkImportUsers, moveUserFamily
+  bulkImportUsers, moveUserFamily, cleanupIncompleteUsers, deleteUser
 } from '../controllers/masterController';
 import { checkSubscription } from '../middlewares/saasMiddleware';
 
@@ -22,8 +22,10 @@ router.delete('/villages/:id', deleteVillage);
 
 // Users
 router.get('/users', getUsers);
+router.delete('/users/cleanup-incomplete', cleanupIncompleteUsers);
 router.get('/users/:uid', getUserById);
 router.put('/users/:uid', updateUserStatus);
+router.delete('/users/:uid', deleteUser);
 router.post('/users/family', saveUserFamily);
 router.post('/users/link-account', linkUserAccount);
 router.post('/users/bulk-import', bulkImportUsers);

@@ -133,18 +133,14 @@ const loginSync = async (req, res) => {
                 user = await models_1.User.findByPk(uid);
             }
             else {
-                let status = 'INCOMPLETE';
                 if (email === superAdminEmail()) {
-                    status = 'ACTIVE';
-                }
-                user = await models_1.User.create({
-                    uid,
-                    name: name || (email === superAdminEmail() ? 'Superadmin appsbee' : ''),
-                    email,
-                    photoUrl: photoUrl || '',
-                    status,
-                });
-                if (email === superAdminEmail()) {
+                    user = await models_1.User.create({
+                        uid,
+                        name: name || 'Superadmin appsbee',
+                        email,
+                        photoUrl: photoUrl || '',
+                        status: 'ACTIVE',
+                    });
                     const existingRole = await models_1.Role.findOne({ where: { userId: uid, name: 'SUPER_ADMIN' } });
                     if (!existingRole) {
                         await models_1.Role.create({
@@ -154,6 +150,16 @@ const loginSync = async (req, res) => {
                             villageId: null,
                         });
                     }
+                }
+                else {
+                    // Jangan buat record di database jika user baru dan belum memilih/memasukkan kode desa valid.
+                    // Kembalikan null data sehingga Flutter AuthWrapper langsung mengarahkan ke JoinVillagePage / VillageRegistrationPage
+                    res.status(200).json({
+                        success: true,
+                        message: 'User authenticated, pending village selection',
+                        data: null,
+                    });
+                    return;
                 }
             }
         }
@@ -205,9 +211,42 @@ const updateProfile = async (req, res) => {
     try {
         const { uid } = req.params;
         const { roles, villageId } = req.body;
-        const user = await models_1.User.findByPk(uid);
+        let user = await models_1.User.findByPk(uid);
         if (!user) {
-            res.status(404).json({ success: false, message: 'User not found' });
+            // Jika user belum ada di database (karena deferred creation saat loginSync),
+            // buat user baru jika villageId valid disediakan (misal dari JoinVillagePage)
+            if (!villageId) {
+                res.status(404).json({ success: false, message: 'User not found' });
+                return;
+            }
+            const village = await models_1.Village.findByPk(villageId);
+            if (!village) {
+                res.status(404).json({ success: false, message: 'Desa tidak ditemukan' });
+                return;
+            }
+            const updateData = pickProfileFields(req.body);
+            user = await models_1.User.create({
+                uid: uid,
+                name: updateData.name || req.body.name || '',
+                email: updateData.email || req.body.email || '',
+                photoUrl: updateData.photoUrl || req.body.photoUrl || '',
+                status: 'PENDING',
+                villageId,
+                noKK: updateData.noKK || req.body.noKK || null,
+                nik: updateData.nik || req.body.nik || null,
+                phoneNumber: updateData.phoneNumber || req.body.phoneNumber || null,
+            });
+            await assignRoles(uid, ['WARGA'], villageId);
+            const createdUser = await models_1.User.findByPk(uid, {
+                include: [
+                    { model: models_1.Role, as: 'roles', attributes: ['id', 'name', 'villageId'] },
+                ],
+            });
+            res.status(200).json({
+                success: true,
+                message: 'Profile created and pending approval',
+                data: createdUser ? formatUserWithRoles(createdUser) : user,
+            });
             return;
         }
         const updateData = pickProfileFields(req.body);

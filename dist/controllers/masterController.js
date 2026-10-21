@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.bulkImportUsers = exports.updateOnlineStatus = exports.removeFcmToken = exports.updateFcmToken = exports.deleteSlide = exports.updateSlide = exports.createSlide = exports.getSlides = exports.deleteMenu = exports.updateMenu = exports.getMenus = exports.linkUserAccount = exports.updateUserRoles = exports.updateUserStatus = exports.getUserById = exports.saveUserFamily = exports.moveUserFamily = exports.deleteUserFamily = exports.getUsers = exports.registerVillage = exports.deleteVillage = exports.updateVillage = exports.createVillage = exports.generateResidentUniqueCode = exports.getVillageById = exports.getVillages = void 0;
+exports.bulkImportUsers = exports.updateOnlineStatus = exports.removeFcmToken = exports.updateFcmToken = exports.deleteSlide = exports.updateSlide = exports.createSlide = exports.getSlides = exports.deleteMenu = exports.updateMenu = exports.getMenus = exports.linkUserAccount = exports.updateUserRoles = exports.updateUserStatus = exports.deleteUser = exports.cleanupIncompleteUsers = exports.getUserById = exports.saveUserFamily = exports.moveUserFamily = exports.deleteUserFamily = exports.getUsers = exports.registerVillage = exports.deleteVillage = exports.updateVillage = exports.createVillage = exports.generateResidentUniqueCode = exports.getVillageById = exports.getVillages = void 0;
 const sequelize_1 = require("sequelize");
 const models_1 = require("../models");
 const uuid_1 = require("uuid");
@@ -757,6 +757,59 @@ const getUserById = async (req, res) => {
     }
 };
 exports.getUserById = getUserById;
+const cleanupIncompleteUsers = async (req, res) => {
+    try {
+        const orphanUsers = await models_1.User.findAll({
+            where: {
+                status: 'INCOMPLETE',
+                [sequelize_1.Op.or]: [
+                    { villageId: null },
+                    { villageId: '' },
+                    { villageId: '-' },
+                ]
+            },
+            attributes: ['uid']
+        });
+        const uids = orphanUsers.map(u => u.getDataValue('uid'));
+        if (uids.length === 0) {
+            res.json({ success: true, message: 'Tidak ada akun incomplete yang perlu dibersihkan', count: 0 });
+            return;
+        }
+        await models_1.Role.destroy({ where: { userId: uids } });
+        const deletedCount = await models_1.User.destroy({ where: { uid: uids } });
+        res.json({
+            success: true,
+            message: `Berhasil membersihkan ${deletedCount} akun incomplete`,
+            count: deletedCount,
+        });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+exports.cleanupIncompleteUsers = cleanupIncompleteUsers;
+const deleteUser = async (req, res) => {
+    try {
+        const { uid } = req.params;
+        const user = await models_1.User.findByPk(uid);
+        if (!user) {
+            res.status(404).json({ success: false, message: 'User tidak ditemukan' });
+            return;
+        }
+        const email = user.getDataValue('email');
+        if (email === (process.env.SUPERADMIN_EMAIL || 'appsbeem@gmail.com')) {
+            res.status(403).json({ success: false, message: 'Tidak dapat menghapus akun Super Admin' });
+            return;
+        }
+        await models_1.Role.destroy({ where: { userId: uid } });
+        await models_1.User.destroy({ where: { uid } });
+        res.json({ success: true, message: 'User berhasil dihapus' });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+exports.deleteUser = deleteUser;
 const updateUserStatus = async (req, res) => {
     try {
         const { uid } = req.params;
