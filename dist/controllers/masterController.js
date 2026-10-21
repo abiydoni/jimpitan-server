@@ -233,6 +233,20 @@ const registerVillage = async (req, res) => {
     const transaction = await models_1.sequelize.transaction();
     try {
         const { uid, name, email, photoUrl, villageName, address, rtRw, noKK, nik, phone, phoneNumber } = req.body;
+        const finalPhone = (phone || phoneNumber) ? String(phone || phoneNumber).trim() : null;
+        const finalNoKK = noKK ? String(noKK).trim() : null;
+        const finalNik = nik ? String(nik).trim() : null;
+        const finalVillageName = villageName ? String(villageName).trim() : null;
+        const finalAddress = address ? String(address).trim() : null;
+        const finalRtRw = rtRw ? String(rtRw).trim() : null;
+        if (!uid || !finalVillageName || !finalAddress || !finalRtRw || !finalNoKK || !finalNik || !finalPhone) {
+            await transaction.rollback();
+            res.status(400).json({
+                success: false,
+                message: 'Seluruh data wajib diisi lengkap (Nama Desa, Alamat, RT/RW, No KK, NIK, dan Nomor HP/WhatsApp).'
+            });
+            return;
+        }
         // 1. Generate random 5 digit code (Hanya Angka)
         const chars = '0123456789';
         let villageCode = '';
@@ -252,7 +266,6 @@ const registerVillage = async (req, res) => {
         const sanitizedEmail = (typeof email === 'string' && email.trim().length > 0)
             ? email.trim()
             : null;
-        const finalPhone = (phone || phoneNumber) ? String(phone || phoneNumber).trim() : null;
         // 3. Setup user as ADMIN for the new village
         const [user, created] = await models_1.User.findOrCreate({
             where: { uid },
