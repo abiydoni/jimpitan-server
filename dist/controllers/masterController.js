@@ -247,6 +247,48 @@ const registerVillage = async (req, res) => {
             });
             return;
         }
+        // Cek apakah akun ini sudah aktif di desa lain
+        const existingUser = await models_1.User.findByPk(uid, { transaction });
+        if (existingUser && existingUser.getDataValue('villageId') && existingUser.getDataValue('status') === 'ACTIVE') {
+            await transaction.rollback();
+            res.status(400).json({
+                success: false,
+                message: 'Akun Google ini sudah terdaftar sebagai warga/admin di desa lain. Silakan gunakan akun lain untuk membuat desa baru.'
+            });
+            return;
+        }
+        // Cek apakah NIK sudah digunakan di database
+        const existingUserWithNik = await models_1.User.findOne({
+            where: {
+                nik: finalNik,
+                uid: { [sequelize_1.Op.ne]: uid }
+            },
+            transaction
+        });
+        if (existingUserWithNik) {
+            await transaction.rollback();
+            res.status(400).json({
+                success: false,
+                message: `NIK "${finalNik}" sudah terdaftar di sistem atas nama "${existingUserWithNik.getDataValue('name') || 'Warga'}". Silakan periksa kembali atau ganti data NIK tersebut.`
+            });
+            return;
+        }
+        // Cek apakah No KK sudah terdaftar di database
+        const existingUserWithNoKK = await models_1.User.findOne({
+            where: {
+                noKK: finalNoKK,
+                uid: { [sequelize_1.Op.ne]: uid }
+            },
+            transaction
+        });
+        if (existingUserWithNoKK) {
+            await transaction.rollback();
+            res.status(400).json({
+                success: false,
+                message: `Nomor Kartu Keluarga (KK) "${finalNoKK}" sudah terdaftar di sistem atas nama "${existingUserWithNoKK.getDataValue('name') || 'Warga'}". Silakan periksa kembali atau ganti data No KK tersebut.`
+            });
+            return;
+        }
         // 1. Generate random 5 digit code (Hanya Angka)
         const chars = '0123456789';
         let villageCode = '';
