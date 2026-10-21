@@ -269,7 +269,7 @@ const registerVillage = async (req, res) => {
             await transaction.rollback();
             res.status(400).json({
                 success: false,
-                message: `NIK "${finalNik}" sudah terdaftar di sistem atas nama "${existingUserWithNik.getDataValue('name') || 'Warga'}". Silakan periksa kembali atau ganti data NIK tersebut.`
+                message: 'NIK tersebut sudah terdaftar di sistem. Silakan periksa kembali atau gunakan NIK Anda yang benar.'
             });
             return;
         }
@@ -285,7 +285,7 @@ const registerVillage = async (req, res) => {
             await transaction.rollback();
             res.status(400).json({
                 success: false,
-                message: `Nomor Kartu Keluarga (KK) "${finalNoKK}" sudah terdaftar di sistem atas nama "${existingUserWithNoKK.getDataValue('name') || 'Warga'}". Silakan periksa kembali atau ganti data No KK tersebut.`
+                message: 'Nomor Kartu Keluarga (KK) tersebut sudah terdaftar di sistem. Silakan periksa kembali atau gunakan Nomor KK Anda yang benar.'
             });
             return;
         }
