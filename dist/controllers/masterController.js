@@ -308,6 +308,8 @@ const registerVillage = async (req, res) => {
         const sanitizedEmail = (typeof email === 'string' && email.trim().length > 0)
             ? email.trim()
             : null;
+        const generatedFamilyId = `FAM-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        const generatedUniqueCode = await (0, exports.generateResidentUniqueCode)(transaction);
         // 3. Setup user as ADMIN and Family Head for the new village
         const [user, created] = await models_1.User.findOrCreate({
             where: { uid },
@@ -319,7 +321,8 @@ const registerVillage = async (req, res) => {
                 noKK: noKK ? String(noKK).trim() : null,
                 nik: nik ? String(nik).trim() : null,
                 phoneNumber: finalPhone,
-                familyId: uid,
+                familyId: generatedFamilyId,
+                uniqueCode: generatedUniqueCode,
                 statusHubungan: 'KEPALA_KELUARGA',
                 status: 'ACTIVE',
                 villageId
@@ -330,7 +333,8 @@ const registerVillage = async (req, res) => {
             await user.update({
                 status: 'ACTIVE',
                 villageId,
-                familyId: user.getDataValue('familyId') || uid,
+                familyId: user.getDataValue('familyId') || generatedFamilyId,
+                uniqueCode: user.getDataValue('uniqueCode') || generatedUniqueCode,
                 statusHubungan: user.getDataValue('statusHubungan') || 'KEPALA_KELUARGA',
                 ...(name ? { name } : {}),
                 ...(sanitizedEmail ? { email: sanitizedEmail } : {}),
@@ -437,6 +441,28 @@ const getUsers = async (req, res) => {
                     required: false
                 }]
         });
+        // Auto-heal missing uniqueCode or familyId for users in this village
+        for (const u of users) {
+            let changed = false;
+            const updateData = {};
+            if (u.getDataValue('villageId') && (!u.getDataValue('uniqueCode') || u.getDataValue('uniqueCode') === '')) {
+                const generatedCode = await (0, exports.generateResidentUniqueCode)();
+                updateData.uniqueCode = generatedCode;
+                u.setDataValue('uniqueCode', generatedCode);
+                changed = true;
+            }
+            if (u.getDataValue('villageId') && (!u.getDataValue('familyId') || u.getDataValue('familyId') === '')) {
+                const generatedFamId = `FAM-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+                updateData.familyId = generatedFamId;
+                updateData.statusHubungan = u.getDataValue('statusHubungan') || 'KEPALA_KELUARGA';
+                u.setDataValue('familyId', generatedFamId);
+                u.setDataValue('statusHubungan', updateData.statusHubungan);
+                changed = true;
+            }
+            if (changed) {
+                await u.update(updateData);
+            }
+        }
         const nowMs = Date.now();
         const staleOnlineUids = [];
         const formattedUsers = users.map((u) => {
@@ -814,16 +840,28 @@ const getUserById = async (req, res) => {
             res.status(404).json({ success: false, message: 'User not found' });
             return;
         }
-        // Auto-heal: Jika user memiliki villageId namun familyId masih kosong, otomatis jadikan Kepala Keluarga (familyId = uid)
-        if (user.getDataValue('villageId') && (!user.getDataValue('familyId') || user.getDataValue('familyId') === '')) {
-            const fallbackFamilyId = user.getDataValue('uid');
-            const fallbackStatus = user.getDataValue('statusHubungan') || 'KEPALA_KELUARGA';
-            await user.update({
-                familyId: fallbackFamilyId,
-                statusHubungan: fallbackStatus
-            });
-            user.setDataValue('familyId', fallbackFamilyId);
-            user.setDataValue('statusHubungan', fallbackStatus);
+        // Auto-heal: Jika user memiliki villageId namun familyId atau uniqueCode masih kosong, otomatis lengkapi
+        if (user.getDataValue('villageId')) {
+            let needsUpdate = false;
+            const updateData = {};
+            if (!user.getDataValue('familyId') || user.getDataValue('familyId') === '') {
+                const fallbackFamilyId = `FAM-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+                const fallbackStatus = user.getDataValue('statusHubungan') || 'KEPALA_KELUARGA';
+                updateData.familyId = fallbackFamilyId;
+                updateData.statusHubungan = fallbackStatus;
+                user.setDataValue('familyId', fallbackFamilyId);
+                user.setDataValue('statusHubungan', fallbackStatus);
+                needsUpdate = true;
+            }
+            if (!user.getDataValue('uniqueCode') || user.getDataValue('uniqueCode') === '') {
+                const generatedCode = await (0, exports.generateResidentUniqueCode)();
+                updateData.uniqueCode = generatedCode;
+                user.setDataValue('uniqueCode', generatedCode);
+                needsUpdate = true;
+            }
+            if (needsUpdate) {
+                await user.update(updateData);
+            }
             // Pastikan juga role WARGA ada untuk keperluan iuran/tagihan
             const hasWarga = user.roles?.some((r) => r.name === 'WARGA');
             if (!hasWarga) {
