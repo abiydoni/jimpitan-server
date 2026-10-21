@@ -330,11 +330,13 @@ export const registerVillage = async (req: Request, res: Response): Promise<void
     const config = await generateDefaultVillageConfig();
     const villageId = `village_${uuidv4().substring(0, 8)}`;
 
+    const fullAddress = ((address || '').toString().trim() + (rtRw ? ` - RT/RW ${rtRw}` : '')).trim();
+
     // 2. Create new village document
     const village = await Village.create({
       id: villageId,
       name: villageName,
-      address: address + (rtRw ? ` - ${rtRw}` : ''),
+      address: fullAddress,
       uniqueCode: villageCode,
       config
     }, { transaction });
@@ -357,6 +359,7 @@ export const registerVillage = async (req: Request, res: Response): Promise<void
         noKK: noKK ? String(noKK).trim() : null,
         nik: nik ? String(nik).trim() : null,
         phoneNumber: finalPhone,
+        alamat: fullAddress || null,
         familyId: generatedFamilyId,
         uniqueCode: generatedUniqueCode,
         statusHubungan: 'KEPALA_KELUARGA',
@@ -373,6 +376,7 @@ export const registerVillage = async (req: Request, res: Response): Promise<void
         familyId: user.getDataValue('familyId') || generatedFamilyId,
         uniqueCode: user.getDataValue('uniqueCode') || generatedUniqueCode,
         statusHubungan: user.getDataValue('statusHubungan') || 'KEPALA_KELUARGA',
+        alamat: user.getDataValue('alamat') || fullAddress || null,
         ...(name ? { name } : {}),
         ...(sanitizedEmail ? { email: sanitizedEmail } : {}),
         ...(noKK ? { noKK: String(noKK).trim() } : {}),
@@ -485,7 +489,8 @@ export const getUsers = async (req: Request, res: Response): Promise<void> => {
       }]
     });
 
-    // Auto-heal missing uniqueCode or familyId for users in this village
+    // Auto-heal missing uniqueCode, familyId, or alamat for users in this village
+    let villageAddress: string | null = null;
     for (const u of users) {
       let changed = false;
       const updateData: any = {};
@@ -502,6 +507,17 @@ export const getUsers = async (req: Request, res: Response): Promise<void> => {
         u.setDataValue('familyId', generatedFamId);
         u.setDataValue('statusHubungan', updateData.statusHubungan);
         changed = true;
+      }
+      if (u.getDataValue('villageId') && (!u.getDataValue('alamat') || u.getDataValue('alamat') === '')) {
+        if (!villageAddress) {
+          const v = await Village.findByPk(u.getDataValue('villageId'));
+          villageAddress = v?.getDataValue('address') || '';
+        }
+        if (villageAddress) {
+          updateData.alamat = villageAddress;
+          u.setDataValue('alamat', villageAddress);
+          changed = true;
+        }
       }
       if (changed) {
         await u.update(updateData);
@@ -950,6 +966,15 @@ export const getUserById = async (req: Request, res: Response): Promise<void> =>
         updateData.uniqueCode = generatedCode;
         user.setDataValue('uniqueCode', generatedCode);
         needsUpdate = true;
+      }
+
+      if (!user.getDataValue('alamat') || user.getDataValue('alamat') === '') {
+        const v = await Village.findByPk(user.getDataValue('villageId'));
+        if (v && v.getDataValue('address')) {
+          updateData.alamat = v.getDataValue('address');
+          user.setDataValue('alamat', v.getDataValue('address'));
+          needsUpdate = true;
+        }
       }
 
       if (needsUpdate) {
