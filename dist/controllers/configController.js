@@ -23,7 +23,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateAppVersion = exports.getAppVersion = void 0;
+exports.verifyReviewerCredentials = exports.updateAppVersion = exports.getAppVersion = void 0;
 const models_1 = require("../models");
 /**
  * GET /api/config/version
@@ -51,7 +51,20 @@ const getAppVersion = async (req, res) => {
         if (!updateUrl || updateUrl.includes('com.appsbeem.jimpitan')) {
             updateUrl = 'https://play.google.com/store/apps/details?id=jimpitan.appsbee.my.id';
         }
-        // Default values if missing
+        // Hanya berikan password penguji jika pemanggil adalah admin terautentikasi
+        let isAuthorized = false;
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            try {
+                const token = authHeader.split('Bearer ')[1];
+                const { getAuth } = await Promise.resolve().then(() => __importStar(require('firebase-admin/auth')));
+                const decoded = await getAuth().verifyIdToken(token);
+                if (decoded)
+                    isAuthorized = true;
+            }
+            catch (_) { }
+        }
+        // Default values if missing (TIDAK ADA default kredensial penguji, murni dari tabel database)
         const data = {
             latestVersion: config.latestVersion || '1.10.2',
             minVersion: config.minVersion || '1.0.0',
@@ -61,9 +74,11 @@ const getAppVersion = async (req, res) => {
             releaseNotes: config.releaseNotes || 'Perbaikan bug dan peningkatan performa.',
             showNotification: showNotif,
             showUpdateNotification: showNotif,
-            reviewerEmail: config.reviewerEmail || 'fourbee02@gmail.com',
-            reviewerPassword: config.reviewerPassword || 'Reviewer2026!',
+            reviewerEmail: config.reviewerEmail || '',
         };
+        if (isAuthorized) {
+            data.reviewerPassword = config.reviewerPassword || '';
+        }
         res.json({
             success: true,
             data: data,
@@ -136,3 +151,43 @@ const updateAppVersion = async (req, res) => {
     }
 };
 exports.updateAppVersion = updateAppVersion;
+/**
+ * POST /api/config/reviewer-verify
+ * Endpoint aman untuk memverifikasi kredensial akun penguji Google Play langsung dari tabel database (system_settings)
+ */
+const verifyReviewerCredentials = async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        if (!email || !password) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email dan password penguji tidak boleh kosong'
+            });
+        }
+        const emailSetting = await models_1.SystemSetting.findOne({ where: { key: 'reviewerEmail' } });
+        const passSetting = await models_1.SystemSetting.findOne({ where: { key: 'reviewerPassword' } });
+        const dbEmail = emailSetting?.value ? String(emailSetting.value).trim() : '';
+        const dbPass = passSetting?.value ? String(passSetting.value).trim() : '';
+        if (!dbEmail || !dbPass) {
+            return res.status(403).json({
+                success: false,
+                message: 'Akun penguji belum dikonfigurasi di tabel pengaturan sistem (system_settings).'
+            });
+        }
+        if (dbEmail.toLowerCase() !== String(email).trim().toLowerCase() || dbPass !== String(password).trim()) {
+            return res.status(401).json({
+                success: false,
+                message: 'Email atau password penguji tidak cocok dengan data di sistem.'
+            });
+        }
+        res.json({
+            success: true,
+            message: 'Kredensial penguji berhasil diverifikasi dari tabel sistem'
+        });
+    }
+    catch (error) {
+        console.error('Error verifying reviewer credentials:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+};
+exports.verifyReviewerCredentials = verifyReviewerCredentials;

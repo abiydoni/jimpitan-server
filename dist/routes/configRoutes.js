@@ -7,6 +7,8 @@ const authMiddleware_1 = require("../middlewares/authMiddleware");
 const router = (0, express_1.Router)();
 // GET /api/config/version — publik, tidak perlu auth
 router.get('/version', configController_1.getAppVersion);
+// POST /api/config/reviewer-verify — verifikasi kredensial penguji Play Store langsung ke tabel database
+router.post('/reviewer-verify', configController_1.verifyReviewerCredentials);
 // PUT /api/config/version — perlu auth
 router.put('/version', authMiddleware_1.verifyFirebaseToken, authMiddleware_1.requireSuperAdmin, configController_1.updateAppVersion);
 // POST /api/config/upload-apk — upload file apk (perlu auth)

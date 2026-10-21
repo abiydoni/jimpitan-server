@@ -31,8 +31,20 @@ export const getAppVersion = async (req: Request, res: Response) => {
       updateUrl = 'https://play.google.com/store/apps/details?id=jimpitan.appsbee.my.id';
     }
 
-    // Default values if missing
-    const data = {
+    // Hanya berikan password penguji jika pemanggil adalah admin terautentikasi
+    let isAuthorized = false;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.split('Bearer ')[1];
+        const { getAuth } = await import('firebase-admin/auth');
+        const decoded = await getAuth().verifyIdToken(token);
+        if (decoded) isAuthorized = true;
+      } catch (_) {}
+    }
+
+    // Default values if missing (TIDAK ADA default kredensial penguji, murni dari tabel database)
+    const data: any = {
       latestVersion: config.latestVersion || '1.10.2',
       minVersion: config.minVersion || '1.0.0',
       forceUpdate: config.forceUpdate === 'true' || config.forceUpdate === '1',
@@ -41,9 +53,12 @@ export const getAppVersion = async (req: Request, res: Response) => {
       releaseNotes: config.releaseNotes || 'Perbaikan bug dan peningkatan performa.',
       showNotification: showNotif,
       showUpdateNotification: showNotif,
-      reviewerEmail: config.reviewerEmail || 'fourbee02@gmail.com',
-      reviewerPassword: config.reviewerPassword || 'Reviewer2026!',
+      reviewerEmail: config.reviewerEmail || '',
     };
+
+    if (isAuthorized) {
+      data.reviewerPassword = config.reviewerPassword || '';
+    }
 
     res.json({
       success: true,
@@ -119,6 +134,50 @@ export const updateAppVersion = async (req: Request, res: Response) => {
     res.json({ success: true, message: 'Konfigurasi versi dan akun penguji berhasil diperbarui' });
   } catch (error) {
     console.error('Error updating version config:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+/**
+ * POST /api/config/reviewer-verify
+ * Endpoint aman untuk memverifikasi kredensial akun penguji Google Play langsung dari tabel database (system_settings)
+ */
+export const verifyReviewerCredentials = async (req: Request, res: Response) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Email dan password penguji tidak boleh kosong' 
+      });
+    }
+
+    const emailSetting = await SystemSetting.findOne({ where: { key: 'reviewerEmail' } });
+    const passSetting = await SystemSetting.findOne({ where: { key: 'reviewerPassword' } });
+
+    const dbEmail = (emailSetting as any)?.value ? String((emailSetting as any).value).trim() : '';
+    const dbPass = (passSetting as any)?.value ? String((passSetting as any).value).trim() : '';
+
+    if (!dbEmail || !dbPass) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Akun penguji belum dikonfigurasi di tabel pengaturan sistem (system_settings).' 
+      });
+    }
+
+    if (dbEmail.toLowerCase() !== String(email).trim().toLowerCase() || dbPass !== String(password).trim()) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Email atau password penguji tidak cocok dengan data di sistem.' 
+      });
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Kredensial penguji berhasil diverifikasi dari tabel sistem' 
+    });
+  } catch (error) {
+    console.error('Error verifying reviewer credentials:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
