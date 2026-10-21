@@ -742,12 +742,13 @@ const saveUserFamily = async (req, res) => {
                     phoneNumber: memberPhone,
                 };
                 const targetFamilyId = resolvedFamilyId || targetDocId;
+                const finalResidentCode = resolvedUniqueCode || uniqueCode || await (0, exports.generateResidentUniqueCode)(transaction);
                 const [user, created] = await models_1.User.findOrCreate({
                     where: { uid: targetDocId },
                     defaults: {
                         uid: targetDocId,
                         familyId: targetFamilyId,
-                        uniqueCode: resolvedUniqueCode || uniqueCode || '',
+                        uniqueCode: finalResidentCode,
                         villageId: villageId || '',
                         status: 'ACTIVE',
                         ...sanitizedMemberData
@@ -757,7 +758,7 @@ const saveUserFamily = async (req, res) => {
                 if (!created) {
                     await user.update({
                         familyId: targetFamilyId,
-                        uniqueCode: resolvedUniqueCode || uniqueCode || user.getDataValue('uniqueCode'),
+                        uniqueCode: user.getDataValue('uniqueCode') || finalResidentCode,
                         villageId: villageId || user.getDataValue('villageId'),
                         status: 'ACTIVE',
                         ...sanitizedMemberData
@@ -965,6 +966,23 @@ const updateUserStatus = async (req, res) => {
         const updateData = { status };
         if (villageId)
             updateData.villageId = villageId;
+        // Jika status diubah menjadi ACTIVE (misal disetujui sebagai KK Baru)
+        if (status === 'ACTIVE') {
+            for (const u of users) {
+                if (!u.getDataValue('uniqueCode') || u.getDataValue('uniqueCode') === '') {
+                    const generatedCode = await (0, exports.generateResidentUniqueCode)();
+                    updateData.uniqueCode = generatedCode;
+                    u.setDataValue('uniqueCode', generatedCode);
+                }
+                if (!u.getDataValue('familyId') || u.getDataValue('familyId') === '') {
+                    const generatedFamId = `FAM-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+                    updateData.familyId = generatedFamId;
+                    updateData.statusHubungan = u.getDataValue('statusHubungan') || 'Kepala Keluarga';
+                    u.setDataValue('familyId', generatedFamId);
+                    u.setDataValue('statusHubungan', updateData.statusHubungan);
+                }
+            }
+        }
         const primaryFamilyId = users[0].getDataValue('familyId');
         await models_1.User.update(updateData, {
             where: {
@@ -983,7 +1001,7 @@ const updateUserStatus = async (req, res) => {
         catch (e) {
             console.error('Failed to send sync notification:', e);
         }
-        res.json({ success: true, message: 'User status updated successfully' });
+        res.json({ success: true, message: 'User status updated successfully', data: updateData });
     }
     catch (error) {
         res.status(500).json({ success: false, message: error.message });

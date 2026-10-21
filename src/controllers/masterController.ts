@@ -824,13 +824,14 @@ export const saveUserFamily = async (req: Request, res: Response): Promise<void>
         };
 
         const targetFamilyId = resolvedFamilyId || targetDocId;
+        const finalResidentCode = resolvedUniqueCode || uniqueCode || await generateResidentUniqueCode(transaction);
 
         const [user, created] = await User.findOrCreate({
           where: { uid: targetDocId },
           defaults: {
             uid: targetDocId,
             familyId: targetFamilyId,
-            uniqueCode: resolvedUniqueCode || uniqueCode || '',
+            uniqueCode: finalResidentCode,
             villageId: villageId || '',
             status: 'ACTIVE',
             ...sanitizedMemberData
@@ -841,7 +842,7 @@ export const saveUserFamily = async (req: Request, res: Response): Promise<void>
         if (!created) {
           await user.update({
             familyId: targetFamilyId,
-            uniqueCode: resolvedUniqueCode || uniqueCode || user.getDataValue('uniqueCode'),
+            uniqueCode: user.getDataValue('uniqueCode') || finalResidentCode,
             villageId: villageId || user.getDataValue('villageId'),
             status: 'ACTIVE',
             ...sanitizedMemberData
@@ -1065,6 +1066,24 @@ export const updateUserStatus = async (req: Request, res: Response): Promise<voi
     const updateData: any = { status };
     if (villageId) updateData.villageId = villageId;
 
+    // Jika status diubah menjadi ACTIVE (misal disetujui sebagai KK Baru)
+    if (status === 'ACTIVE') {
+      for (const u of users) {
+        if (!u.getDataValue('uniqueCode') || u.getDataValue('uniqueCode') === '') {
+          const generatedCode = await generateResidentUniqueCode();
+          updateData.uniqueCode = generatedCode;
+          u.setDataValue('uniqueCode', generatedCode);
+        }
+        if (!u.getDataValue('familyId') || u.getDataValue('familyId') === '') {
+          const generatedFamId = `FAM-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+          updateData.familyId = generatedFamId;
+          updateData.statusHubungan = u.getDataValue('statusHubungan') || 'Kepala Keluarga';
+          u.setDataValue('familyId', generatedFamId);
+          u.setDataValue('statusHubungan', updateData.statusHubungan);
+        }
+      }
+    }
+
     const primaryFamilyId = users[0].getDataValue('familyId');
     await User.update(updateData, {
       where: {
@@ -1085,7 +1104,7 @@ export const updateUserStatus = async (req: Request, res: Response): Promise<voi
       console.error('Failed to send sync notification:', e);
     }
 
-    res.json({ success: true, message: 'User status updated successfully' });
+    res.json({ success: true, message: 'User status updated successfully', data: updateData });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
