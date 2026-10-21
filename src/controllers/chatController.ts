@@ -237,11 +237,11 @@ export const getMessages = async (req: AuthRequest, res: Response): Promise<void
 
     const messages = await Message.findAll({
       where: whereClause,
-      order: [['createdAt', 'ASC']],
-      limit: 100, // Batasi jumlah pesan yang diambil
+      order: [['createdAt', 'DESC']],
+      limit: 100, // Ambil 100 pesan terbaru
     });
 
-    res.json({ success: true, data: messages });
+    res.json({ success: true, data: messages.reverse() });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }

@@ -207,10 +207,10 @@ const getMessages = async (req, res) => {
         }
         const messages = await models_1.ChatMessage.findAll({
             where: whereClause,
-            order: [['createdAt', 'ASC']],
-            limit: 100, // Batasi jumlah pesan yang diambil
+            order: [['createdAt', 'DESC']],
+            limit: 100, // Ambil 100 pesan terbaru
         });
-        res.json({ success: true, data: messages });
+        res.json({ success: true, data: messages.reverse() });
     }
     catch (error) {
         res.status(500).json({ success: false, message: error.message });
