@@ -5,6 +5,7 @@ const sequelize_1 = require("sequelize");
 const models_1 = require("../models");
 const uuid_1 = require("uuid");
 const jakartaTime_1 = require("../utils/jakartaTime");
+const notificationHelper_1 = require("../utils/notificationHelper");
 // Villages
 const getVillages = async (req, res) => {
     try {
@@ -108,6 +109,15 @@ const createVillage = async (req, res) => {
             id,
             config
         });
+        // Kirim notifikasi otomatis ke Chat Admin Pusat
+        (0, notificationHelper_1.notifyAdminPusatNewVillage)({
+            villageId: id,
+            villageName: village.getDataValue('name') || req.body.name || 'Desa Baru',
+            uniqueCode: village.getDataValue('uniqueCode') || req.body.uniqueCode || '-',
+            address: village.getDataValue('address') || req.body.address || '-',
+            registrantName: 'Admin Web',
+            registrantPhone: req.body.contactInfo || null
+        }).catch(err => console.error('Error notifying admin pusat in createVillage:', err));
         res.json({ success: true, data: village });
     }
     catch (error) {
@@ -414,6 +424,16 @@ const registerVillage = async (req, res) => {
             autoRenew: false
         }, { transaction });
         await transaction.commit();
+        // Kirim notifikasi otomatis ke Chat Admin Pusat
+        (0, notificationHelper_1.notifyAdminPusatNewVillage)({
+            villageId,
+            villageName: villageName || 'Desa Baru',
+            uniqueCode: villageCode,
+            address: fullAddress || '-',
+            registrantName: name || 'Admin Desa',
+            registrantPhone: finalPhone || null,
+            registrantEmail: sanitizedEmail || null
+        }).catch(err => console.error('Error notifying admin pusat in registerVillage:', err));
         res.status(201).json({ success: true, message: 'Village registered successfully', data: { villageId, villageCode } });
     }
     catch (error) {

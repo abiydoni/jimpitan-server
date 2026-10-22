@@ -7,6 +7,7 @@ import {
 } from '../models';
 import { v4 as uuidv4 } from 'uuid';
 import { addJakartaMonths } from '../utils/jakartaTime';
+import { notifyAdminPusatNewVillage } from '../utils/notificationHelper';
 
 // Villages
 export const getVillages = async (req: Request, res: Response): Promise<void> => {
@@ -116,6 +117,17 @@ export const createVillage = async (req: Request, res: Response): Promise<void> 
       id,
       config
     });
+
+    // Kirim notifikasi otomatis ke Chat Admin Pusat
+    notifyAdminPusatNewVillage({
+      villageId: id,
+      villageName: village.getDataValue('name') || req.body.name || 'Desa Baru',
+      uniqueCode: village.getDataValue('uniqueCode') || req.body.uniqueCode || '-',
+      address: village.getDataValue('address') || req.body.address || '-',
+      registrantName: 'Admin Web',
+      registrantPhone: req.body.contactInfo || null
+    }).catch(err => console.error('Error notifying admin pusat in createVillage:', err));
+
     res.json({ success: true, data: village });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
@@ -460,6 +472,18 @@ export const registerVillage = async (req: Request, res: Response): Promise<void
     }, { transaction });
 
     await transaction.commit();
+
+    // Kirim notifikasi otomatis ke Chat Admin Pusat
+    notifyAdminPusatNewVillage({
+      villageId,
+      villageName: villageName || 'Desa Baru',
+      uniqueCode: villageCode,
+      address: fullAddress || '-',
+      registrantName: name || 'Admin Desa',
+      registrantPhone: finalPhone || null,
+      registrantEmail: sanitizedEmail || null
+    }).catch(err => console.error('Error notifying admin pusat in registerVillage:', err));
+
     res.status(201).json({ success: true, message: 'Village registered successfully', data: { villageId, villageCode } });
   } catch (error: any) {
     await transaction.rollback();
