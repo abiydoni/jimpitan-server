@@ -139,8 +139,10 @@ const getChatContacts = async (req, res) => {
                 isOnline: false,
             });
             // Super admin harus bisa melihat semua grup desa
-            const { Village } = require('../models');
-            const allVillages = await Village.findAll();
+            const allVillages = await models_1.Village.findAll({
+                attributes: ['id', 'name'],
+                order: [['name', 'ASC']],
+            });
             allVillages.forEach((v) => {
                 groups.push({
                     uid: `GROUP_${v.id}`,
@@ -152,8 +154,7 @@ const getChatContacts = async (req, res) => {
         }
         else {
             // Jika di desa tertentu, tampilkan grup RT desa tersebut
-            const { Village } = require('../models');
-            const village = await Village.findByPk(villageId);
+            const village = await models_1.Village.findByPk(villageId, { attributes: ['id', 'name'] });
             if (village) {
                 groups.push({
                     uid: `GROUP_${village.id}`,
@@ -162,6 +163,17 @@ const getChatContacts = async (req, res) => {
                     isOnline: false,
                 });
             }
+        }
+        // Pastikan SYSTEM_BOT selalu tersedia untuk Super Admin
+        const hasSystemBot = formattedUsers.some((u) => u.uid === 'SYSTEM_BOT');
+        if (!hasSystemBot && villageId === 'ALL') {
+            formattedUsers.unshift({
+                uid: 'SYSTEM_BOT',
+                name: 'Sistem Registrasi',
+                foto: 'https://cdn-icons-png.flaticon.com/512/4712/4712109.png',
+                isOnline: true,
+                lastSeen: new Date().toISOString()
+            });
         }
         // Gabungkan Grup di paling atas, disusul users
         res.json({ success: true, data: [...groups, ...formattedUsers] });
@@ -208,7 +220,7 @@ const getMessages = async (req, res) => {
         const messages = await models_1.ChatMessage.findAll({
             where: whereClause,
             order: [['createdAt', 'DESC']],
-            limit: 100, // Ambil 100 pesan terbaru
+            limit: 50, // 50 pesan terbaru cukup dan jauh lebih cepat
         });
         res.json({ success: true, data: messages.reverse() });
     }
@@ -255,22 +267,29 @@ const getUnreadCounts = async (req, res) => {
         }
         const counts = {};
         const details = [];
-        // 1. Pesan Personal Unread
+        // 1. Pesan Personal Unread (hanya ambil kolom yang dibutuhkan)
         const unreadPersonalMessages = await models_1.ChatMessage.findAll({
             where: {
                 receiverUid: uid,
                 isRead: false,
                 senderUid: { [sequelize_1.Op.ne]: uid },
             },
+            attributes: ['id', 'senderUid', 'senderName', 'roomId', 'message', 'createdAt'],
             order: [['createdAt', 'DESC']],
         });
         const personalGroups = {};
         unreadPersonalMessages.forEach((msg) => {
             const senderUid = msg.getDataValue('senderUid');
-            const roomId = msg.getDataValue('roomId') || senderUid;
+            const roomId = msg.getDataValue('roomId');
+            // Simpan count berdasarkan senderUid DAN roomId agar kompatibel dengan lookup web dan mobile
+            if (senderUid) {
+                counts[senderUid] = (counts[senderUid] || 0) + 1;
+            }
+            if (roomId && roomId !== senderUid) {
+                counts[roomId] = (counts[roomId] || 0) + 1;
+            }
             const key = roomId || senderUid;
             if (key) {
-                counts[key] = (counts[key] || 0) + 1;
                 if (!personalGroups[key]) {
                     personalGroups[key] = [];
                 }

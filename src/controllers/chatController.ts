@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
-import { User, sequelize, ChatMessage as Message, GroupReadState } from '../models';
+import { User, Village, sequelize, ChatMessage as Message, GroupReadState } from '../models';
 import { Op } from 'sequelize';
 import { sendChatNotification } from '../services/firebaseService';
 import { v4 as uuidv4 } from 'uuid';
@@ -167,8 +167,10 @@ export const getChatContacts = async (req: AuthRequest, res: Response): Promise<
       });
 
       // Super admin harus bisa melihat semua grup desa
-      const { Village } = require('../models');
-      const allVillages = await Village.findAll();
+      const allVillages = await Village.findAll({
+        attributes: ['id', 'name'],
+        order: [['name', 'ASC']],
+      });
       allVillages.forEach((v: any) => {
         groups.push({
           uid: `GROUP_${v.id}`,
@@ -179,8 +181,7 @@ export const getChatContacts = async (req: AuthRequest, res: Response): Promise<
       });
     } else {
       // Jika di desa tertentu, tampilkan grup RT desa tersebut
-      const { Village } = require('../models');
-      const village = await Village.findByPk(villageId);
+      const village: any = await Village.findByPk(villageId as string, { attributes: ['id', 'name'] });
       if (village) {
         groups.push({
           uid: `GROUP_${village.id}`,
@@ -189,6 +190,18 @@ export const getChatContacts = async (req: AuthRequest, res: Response): Promise<
           isOnline: false,
         });
       }
+    }
+
+    // Pastikan SYSTEM_BOT selalu tersedia untuk Super Admin
+    const hasSystemBot = formattedUsers.some((u: any) => u.uid === 'SYSTEM_BOT');
+    if (!hasSystemBot && villageId === 'ALL') {
+      formattedUsers.unshift({
+        uid: 'SYSTEM_BOT',
+        name: 'Sistem Registrasi',
+        foto: 'https://cdn-icons-png.flaticon.com/512/4712/4712109.png',
+        isOnline: true,
+        lastSeen: new Date().toISOString()
+      });
     }
 
     // Gabungkan Grup di paling atas, disusul users
@@ -238,7 +251,7 @@ export const getMessages = async (req: AuthRequest, res: Response): Promise<void
     const messages = await Message.findAll({
       where: whereClause,
       order: [['createdAt', 'DESC']],
-      limit: 100, // Ambil 100 pesan terbaru
+      limit: 50, // 50 pesan terbaru cukup dan jauh lebih cepat
     });
 
     res.json({ success: true, data: messages.reverse() });
@@ -289,23 +302,32 @@ export const getUnreadCounts = async (req: AuthRequest, res: Response): Promise<
     const counts: Record<string, number> = {};
     const details: any[] = [];
 
-    // 1. Pesan Personal Unread
+    // 1. Pesan Personal Unread (hanya ambil kolom yang dibutuhkan)
     const unreadPersonalMessages = await Message.findAll({
       where: {
         receiverUid: uid,
         isRead: false,
         senderUid: { [Op.ne]: uid },
       },
+      attributes: ['id', 'senderUid', 'senderName', 'roomId', 'message', 'createdAt'],
       order: [['createdAt', 'DESC']],
     });
 
     const personalGroups: Record<string, any[]> = {};
     unreadPersonalMessages.forEach((msg: any) => {
       const senderUid = msg.getDataValue('senderUid');
-      const roomId = msg.getDataValue('roomId') || senderUid;
+      const roomId = msg.getDataValue('roomId');
+
+      // Simpan count berdasarkan senderUid DAN roomId agar kompatibel dengan lookup web dan mobile
+      if (senderUid) {
+        counts[senderUid] = (counts[senderUid] || 0) + 1;
+      }
+      if (roomId && roomId !== senderUid) {
+        counts[roomId] = (counts[roomId] || 0) + 1;
+      }
+
       const key = roomId || senderUid;
       if (key) {
-        counts[key] = (counts[key] || 0) + 1;
         if (!personalGroups[key]) {
           personalGroups[key] = [];
         }
