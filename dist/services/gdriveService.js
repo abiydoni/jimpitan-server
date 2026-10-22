@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.uploadFileToDrive = exports.getOrCreateFolder = void 0;
+exports.cleanFolderDuplicates = exports.uploadFileToDrive = exports.getOrCreateFolder = void 0;
 const googleapis_1 = require("googleapis");
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
@@ -105,16 +105,7 @@ const uploadFileToDrive = async (filePath, folderId, customFileName) => {
             // Jika ada lebih dari satu file dengan nama yang sama (duplikat dari backup sebelumnya), bersihkan sisanya
             if (existingFiles.length > 1) {
                 for (let i = 1; i < existingFiles.length; i++) {
-                    try {
-                        await drive.files.delete({
-                            fileId: existingFiles[i].id,
-                            supportsAllDrives: true,
-                        });
-                        console.log(`🧹 Duplikat lama dibersihkan: ${fileName} (${existingFiles[i].id})`);
-                    }
-                    catch (delErr) {
-                        console.warn(`⚠️ Gagal menghapus file duplikat lama:`, delErr);
-                    }
+                    await removeDuplicateFile(drive, existingFiles[i].id, folderId, fileName);
                 }
             }
             return response.data;
@@ -130,6 +121,13 @@ const uploadFileToDrive = async (filePath, folderId, customFileName) => {
             fields: 'id, name, webViewLink',
             supportsAllDrives: true,
         });
+        // 3. Post-upload deduplication: Jika ternyata ada upload konkuren yang lolos, bersihkan duplikat
+        try {
+            await (0, exports.cleanFolderDuplicates)(folderId);
+        }
+        catch (cleanErr) {
+            console.warn('⚠️ Post-upload deduplication warning:', cleanErr);
+        }
         return response.data;
     }
     catch (error) {
@@ -138,3 +136,101 @@ const uploadFileToDrive = async (filePath, folderId, customFileName) => {
     }
 };
 exports.uploadFileToDrive = uploadFileToDrive;
+/**
+ * Helper untuk menghapus atau mencabut parent (unlink) file duplikat di GDrive
+ * dengan fallback delete -> trash -> removeParents.
+ */
+const removeDuplicateFile = async (drive, fileId, folderId, fileName) => {
+    try {
+        await drive.files.delete({
+            fileId,
+            supportsAllDrives: true,
+        });
+        console.log(`🧹 Berhasil menghapus duplikat GDrive: ${fileName || fileId} (ID: ${fileId})`);
+        return true;
+    }
+    catch (delErr) {
+        try {
+            await drive.files.update({
+                fileId,
+                requestBody: { trashed: true },
+                supportsAllDrives: true,
+            });
+            console.log(`🗑️ Berhasil memindahkan ke sampah: ${fileName || fileId} (ID: ${fileId})`);
+            return true;
+        }
+        catch (trashErr) {
+            try {
+                await drive.files.update({
+                    fileId,
+                    removeParents: folderId,
+                    supportsAllDrives: true,
+                });
+                console.log(`✂️ Berhasil melepaskan duplikat dari folder: ${fileName || fileId} (ID: ${fileId})`);
+                return true;
+            }
+            catch (unlinkErr) {
+                console.warn(`⚠️ Gagal membersihkan duplikat ${fileId}:`, unlinkErr?.message);
+                return false;
+            }
+        }
+    }
+};
+/**
+ * Membersihkan semua file duplikat di sebuah folder Google Drive.
+ * Jika ditemukan beberapa file dengan nama yang sama persis,
+ * file dengan ukuran terbesar / terbaru akan dipertahankan, dan duplikat lainnya dihapus.
+ */
+const cleanFolderDuplicates = async (folderId) => {
+    const drive = getDriveService();
+    try {
+        const res = await drive.files.list({
+            q: `'${folderId}' in parents and trashed = false`,
+            fields: 'files(id, name, size, createdTime)',
+            pageSize: 1000,
+            spaces: 'drive',
+            supportsAllDrives: true,
+            includeItemsFromAllDrives: true,
+        });
+        const files = res.data.files || [];
+        // Kelompokkan berdasarkan nama
+        const fileGroups = {};
+        for (const f of files) {
+            if (!f.name)
+                continue;
+            if (!fileGroups[f.name]) {
+                fileGroups[f.name] = [];
+            }
+            fileGroups[f.name].push(f);
+        }
+        let deletedCount = 0;
+        for (const fileName in fileGroups) {
+            const group = fileGroups[fileName];
+            if (group.length > 1) {
+                // Urutkan: ukuran terbesar di depan, jika ukuran sama maka waktu pembuatan terbaru di depan
+                group.sort((a, b) => {
+                    const sizeA = parseInt(a.size || '0', 10);
+                    const sizeB = parseInt(b.size || '0', 10);
+                    if (sizeB !== sizeA)
+                        return sizeB - sizeA;
+                    const timeA = new Date(a.createdTime || 0).getTime();
+                    const timeB = new Date(b.createdTime || 0).getTime();
+                    return timeB - timeA;
+                });
+                // Simpan index 0 (terbaik/terbesar), hapus index 1 dst.
+                for (let i = 1; i < group.length; i++) {
+                    const dup = group[i];
+                    const ok = await removeDuplicateFile(drive, dup.id, folderId, fileName);
+                    if (ok)
+                        deletedCount++;
+                }
+            }
+        }
+        return deletedCount;
+    }
+    catch (error) {
+        console.error('❌ Gagal membersihkan duplikat folder di GDrive:', error);
+        return 0;
+    }
+};
+exports.cleanFolderDuplicates = cleanFolderDuplicates;

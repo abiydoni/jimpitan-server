@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { generateDatabaseBackup } from '../utils/dbBackup';
 
-import { uploadFileToDrive, getOrCreateFolder } from '../services/gdriveService';
+import { uploadFileToDrive, getOrCreateFolder, cleanFolderDuplicates } from '../services/gdriveService';
 
 // 1. BACKUP DATABASE (DARI TOMBOL WEB DOWNLOAD)
 export const backupDatabase = async (req: Request, res: Response): Promise<void> => {
@@ -46,6 +46,8 @@ export const triggerGDriveBackup = async (req: Request, res: Response): Promise<
     let uploadResult;
     try {
       uploadResult = await uploadFileToDrive(sqlFilePath, targetFolderId, customFileName);
+      // Bersihkan file duplikat jika ada
+      await cleanFolderDuplicates(targetFolderId);
     } finally {
       if (fs.existsSync(sqlFilePath)) {
         fs.unlinkSync(sqlFilePath);
@@ -54,12 +56,37 @@ export const triggerGDriveBackup = async (req: Request, res: Response): Promise<
 
     res.json({
       success: true,
-      message: 'Backup database berhasil diunggah ke Google Drive!',
+      message: 'Backup database berhasil diunggah ke Google Drive dan duplikat dibersihkan!',
       data: uploadResult
     });
   } catch (error: any) {
     console.error('❌ Gagal backup manual ke Google Drive:', error);
     res.status(500).json({ success: false, message: error?.message || 'Gagal backup ke Google Drive' });
+  }
+};
+
+// 1c. CLEAN DUPLIKAT DI GOOGLE DRIVE SECARA MANUAL
+export const cleanGDriveDuplicates = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const gdriveFolderId = process.env.GDRIVE_FOLDER_ID;
+    if (!gdriveFolderId || gdriveFolderId === 'xxxxxx') {
+      res.status(400).json({ success: false, message: 'GDRIVE_FOLDER_ID belum dikonfigurasi di environment (.env).' });
+      return;
+    }
+
+    const currentMonthYear = new Date().toLocaleString('id-ID', { month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' }).replace(/ /g, '-');
+    const targetFolderId = await getOrCreateFolder(currentMonthYear, gdriveFolderId);
+
+    const cleanedCount = await cleanFolderDuplicates(targetFolderId);
+
+    res.json({
+      success: true,
+      message: `Berhasil membersihkan ${cleanedCount} file duplikat di folder ${currentMonthYear} Google Drive.`,
+      cleanedCount
+    });
+  } catch (error: any) {
+    console.error('❌ Gagal membersihkan duplikat Google Drive:', error);
+    res.status(500).json({ success: false, message: error?.message || 'Gagal membersihkan duplikat' });
   }
 };
 

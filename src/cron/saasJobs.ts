@@ -1,13 +1,33 @@
 import cron from 'node-cron';
 import { Op } from 'sequelize';
-import { VillageSubscription, SubscriptionPlan, Invoice, User, Village } from '../models';
+import { VillageSubscription, SubscriptionPlan, Invoice, User, Village, SystemSetting, sequelize } from '../models';
 import { addStartupLog } from '../utils/startupLogs';
 import { addJakartaDays } from '../utils/jakartaTime';
 import { generateDatabaseBackup } from '../utils/dbBackup';
-import { uploadFileToDrive, getOrCreateFolder } from '../services/gdriveService';
+import { uploadFileToDrive, getOrCreateFolder, cleanFolderDuplicates } from '../services/gdriveService';
 import fs from 'fs';
 
-// Flag untuk mencegah eksekusi ganda bersamaan (misal jika ada multi-worker Passenger atau server restart)
+// Helper: Minta lock terdistribusi via MySQL (mencegah eksekusi paralel antar worker Passenger / Cluster)
+async function acquireDistributedLock(lockName: string): Promise<boolean> {
+  try {
+    const [results]: any = await sequelize.query(`SELECT GET_LOCK('${lockName}', 0) as acquired;`);
+    return results && results[0] && results[0].acquired === 1;
+  } catch (e) {
+    console.warn(`⚠️ Gagal meminta lock ${lockName}:`, e);
+    return false;
+  }
+}
+
+// Helper: Lepas lock terdistribusi via MySQL
+async function releaseDistributedLock(lockName: string): Promise<void> {
+  try {
+    await sequelize.query(`SELECT RELEASE_LOCK('${lockName}');`);
+  } catch (e) {
+    console.warn(`⚠️ Gagal melepaskan lock ${lockName}:`, e);
+  }
+}
+
+// Flag lokal di memori proses
 let isBackupRunning = false;
 
 // Fungsi untuk menjadwalkan semua tugas latar belakang SaaS
@@ -16,14 +36,32 @@ export const initSaasCronJobs = () => {
 
   // Jadwal: Setiap hari jam 00:00 WIB
   cron.schedule('0 0 * * *', async () => {
-    console.log('⏳ Memulai eksekusi Cron Jobs harian SaaS (00:00 WIB)...');
-    
+    const hasLock = await acquireDistributedLock('saas_daily_cron_lock');
+    if (!hasLock) {
+      console.log('⚠️ [Cron 00:00] Dilewati: Worker server lain sedang menjalankan tugas harian.');
+      return;
+    }
+
     try {
+      const todayDate = new Date().toLocaleString('id-ID', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' }).replace(/ /g, '-');
+      const lastRun = await SystemSetting.findOne({ where: { key: 'LAST_SAAS_DAILY_CRON_DATE' } });
+      if (lastRun && (lastRun as any).value === todayDate) {
+        console.log(`ℹ️ [Cron 00:00] Tugas harian SaaS untuk tanggal ${todayDate} sudah pernah dijalankan.`);
+        return;
+      }
+
+      console.log('⏳ Memulai eksekusi Cron Jobs harian SaaS (00:00 WIB)...');
       await generateInvoices();
       await executeAutoSuspend();
-      // await sendReminders(); // (Opsional: Kirim FCM ke user)
+
+      await SystemSetting.upsert({
+        key: 'LAST_SAAS_DAILY_CRON_DATE',
+        value: todayDate,
+      });
     } catch (error) {
       console.error('❌ Gagal mengeksekusi Cron Jobs SaaS:', error);
+    } finally {
+      await releaseDistributedLock('saas_daily_cron_lock');
     }
   }, {
     timezone: 'Asia/Jakarta'
@@ -32,12 +70,18 @@ export const initSaasCronJobs = () => {
   // Jadwal: Setiap hari jam 02:00 pagi WIB untuk Auto-Backup Google Drive
   cron.schedule('0 2 * * *', async () => {
     if (isBackupRunning) {
-      console.log('⚠️ Auto-Backup dilewati: proses backup sebelumnya masih berjalan.');
+      console.log('⚠️ Auto-Backup dilewati: proses backup di proses ini masih berjalan.');
+      return;
+    }
+
+    // 1. Minta lock terdistribusi via MySQL (hanya 1 worker Passenger yang boleh jalan)
+    const hasLock = await acquireDistributedLock('saas_gdrive_backup_lock');
+    if (!hasLock) {
+      console.log('⚠️ [Auto-Backup] Dilewati: Worker server lain sedang menjalankan backup.');
       return;
     }
 
     isBackupRunning = true;
-    console.log('⏳ Memulai eksekusi Auto-Backup Google Drive (Jam 02:00 WIB)...');
     try {
       const gdriveFolderId = process.env.GDRIVE_FOLDER_ID;
       if (!gdriveFolderId || gdriveFolderId === 'xxxxxx') {
@@ -45,26 +89,47 @@ export const initSaasCronJobs = () => {
         return;
       }
 
-      // Buat format bulan-tahun (misal: "Agustus-2026") waktu Asia/Jakarta (WIB)
+      // Buat format tanggal (misal: "22-Oktober-2026") waktu Asia/Jakarta (WIB)
+      const currentDate = new Date().toLocaleString('id-ID', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' }).replace(/ /g, '-');
+      const customFileName = `jimpitan-${currentDate}.sql`;
+
+      // 2. Cek apakah backup untuk hari ini sudah pernah berhasil dilakukan (Database Persistent Guard)
+      const lastBackup = await SystemSetting.findOne({ where: { key: 'LAST_GDRIVE_AUTO_BACKUP_DATE' } });
+      if (lastBackup && (lastBackup as any).value === currentDate) {
+        console.log(`ℹ️ [Auto-Backup] Backup Google Drive untuk hari ini (${currentDate}) sudah selesai sebelumnya. Melewati.`);
+        return;
+      }
+
+      console.log(`⏳ Memulai eksekusi Auto-Backup Google Drive (${customFileName}) (Jam 02:00 WIB)...`);
+
+      // Buat format bulan-tahun (misal: "Oktober-2026") waktu Asia/Jakarta (WIB)
       const currentMonthYear = new Date().toLocaleString('id-ID', { month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' }).replace(/ /g, '-');
       
       // Dapatkan atau buat sub-folder untuk bulan ini
       const targetFolderId = await getOrCreateFolder(currentMonthYear, gdriveFolderId);
 
-      // Buat format tanggal (misal: "05-Agustus-2026") waktu Asia/Jakarta (WIB)
-      const currentDate = new Date().toLocaleString('id-ID', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' }).replace(/ /g, '-');
-      const customFileName = `jimpitan-${currentDate}.sql`;
-
-      // 1. Buat file .sql secara lokal
+      // 3. Buat file .sql secara lokal (dengan nama file unik per proses)
       const sqlFilePath = await generateDatabaseBackup();
       console.log(`✅ File backup lokal berhasil dibuat: ${sqlFilePath}`);
 
       try {
-        // 2. Upload ke Google Drive dengan nama custom dan ke folder bulan ini
+        // 4. Upload ke Google Drive dengan nama custom dan ke folder bulan ini
         const uploadResult = await uploadFileToDrive(sqlFilePath, targetFolderId, customFileName);
         console.log(`✅ Berhasil diunggah ke GDrive: ${uploadResult.name} (Link: ${uploadResult.webViewLink})`);
+
+        // 5. Bersihkan duplikat jika ada di folder bulan ini
+        const cleaned = await cleanFolderDuplicates(targetFolderId);
+        if (cleaned > 0) {
+          console.log(`🧹 ${cleaned} file duplikat lama di GDrive berhasil dibersihkan.`);
+        }
+
+        // 6. Catat tanggal sukses backup hari ini agar tidak pernah berjalan ganda
+        await SystemSetting.upsert({
+          key: 'LAST_GDRIVE_AUTO_BACKUP_DATE',
+          value: currentDate,
+        });
       } finally {
-        // 3. Hapus file lokal setelah di-upload (atau jika gagal upload) untuk hemat disk
+        // Hapus file lokal setelah di-upload untuk hemat disk
         if (fs.existsSync(sqlFilePath)) {
           fs.unlinkSync(sqlFilePath);
           console.log(`🧹 File backup lokal dibersihkan: ${sqlFilePath}`);
@@ -74,6 +139,7 @@ export const initSaasCronJobs = () => {
       console.error('❌ Gagal melakukan Auto-Backup Google Drive:', error);
     } finally {
       isBackupRunning = false;
+      await releaseDistributedLock('saas_gdrive_backup_lock');
     }
   }, {
     timezone: 'Asia/Jakarta'

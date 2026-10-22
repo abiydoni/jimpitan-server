@@ -31,7 +31,8 @@ export const generateDatabaseBackup = (): Promise<string> => {
       }
 
       const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
-      const fileName = `backup-jimpitan-${timestamp}.sql`;
+      const uniqueSuffix = `${process.pid}_${Math.random().toString(36).slice(2, 8)}`;
+      const fileName = `backup-jimpitan-${timestamp}-${uniqueSuffix}.sql`;
       const filePath = path.join(backupDir, fileName);
 
       // Command mysqldump

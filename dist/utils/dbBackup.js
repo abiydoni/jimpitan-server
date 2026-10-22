@@ -33,7 +33,8 @@ const generateDatabaseBackup = () => {
                 fs_1.default.mkdirSync(backupDir, { recursive: true });
             }
             const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
-            const fileName = `backup-jimpitan-${timestamp}.sql`;
+            const uniqueSuffix = `${process.pid}_${Math.random().toString(36).slice(2, 8)}`;
+            const fileName = `backup-jimpitan-${timestamp}-${uniqueSuffix}.sql`;
             const filePath = path_1.default.join(backupDir, fileName);
             // Command mysqldump
             const dumpCmd = `mysqldump -h ${host} -P ${port} -u ${user} -p"${pass}" ${dbName} > "${filePath}"`;
