@@ -1,4 +1,4 @@
-import { User, ChatMessage as Message } from '../models';
+import { User, ChatMessage as Message, Role } from '../models';
 import { sendChatNotification } from '../services/firebaseService';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -58,13 +58,26 @@ export const notifyAdminPusatNewVillage = async (data: NewVillageNotificationDat
 
     const messageText = lines.join('\n');
 
+    // Cari superadmin penerima (bisa 'SUPER_ADMIN', akun appsbeem@gmail.com, atau via role SUPER_ADMIN)
+    let superadmin = await User.findByPk('SUPER_ADMIN');
+    if (!superadmin) {
+      superadmin = await User.findOne({ where: { email: 'appsbeem@gmail.com' } });
+    }
+    if (!superadmin) {
+      const superAdminRole = await Role.findOne({ where: { name: 'SUPER_ADMIN' } });
+      if (superAdminRole && superAdminRole.getDataValue('userId')) {
+        superadmin = await User.findByPk(superAdminRole.getDataValue('userId'));
+      }
+    }
+    const targetReceiverUid = superadmin ? superadmin.getDataValue('uid') : 'SUPER_ADMIN';
+
     // 2. Simpan pesan chat ke database dengan roomId: 'GROUP_ADMINS' (Grup Admin Pusat)
     await Message.create({
       id: `msg_${uuidv4()}`,
       villageId: data.villageId,
       senderUid: 'SYSTEM_BOT',
       senderName: 'Sistem Registrasi',
-      receiverUid: 'SUPER_ADMIN',
+      receiverUid: targetReceiverUid,
       roomId: 'GROUP_ADMINS',
       message: messageText,
       isRead: false,
@@ -75,7 +88,6 @@ export const notifyAdminPusatNewVillage = async (data: NewVillageNotificationDat
 
     // 3. Kirim notifikasi FCM ke Super Admin (jika perangkat Android terdaftar dengan token FCM)
     try {
-      const superadmin = await User.findByPk('SUPER_ADMIN');
       const token = superadmin?.getDataValue('fcmToken');
       if (token) {
         await sendChatNotification(

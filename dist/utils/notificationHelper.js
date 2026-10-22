@@ -46,13 +46,25 @@ const notifyAdminPusatNewVillage = async (data) => {
             'Data registrasi telah berhasil disimpan dan siap dikelola.'
         ];
         const messageText = lines.join('\n');
+        // Cari superadmin penerima (bisa 'SUPER_ADMIN', akun appsbeem@gmail.com, atau via role SUPER_ADMIN)
+        let superadmin = await models_1.User.findByPk('SUPER_ADMIN');
+        if (!superadmin) {
+            superadmin = await models_1.User.findOne({ where: { email: 'appsbeem@gmail.com' } });
+        }
+        if (!superadmin) {
+            const superAdminRole = await models_1.Role.findOne({ where: { name: 'SUPER_ADMIN' } });
+            if (superAdminRole && superAdminRole.getDataValue('userId')) {
+                superadmin = await models_1.User.findByPk(superAdminRole.getDataValue('userId'));
+            }
+        }
+        const targetReceiverUid = superadmin ? superadmin.getDataValue('uid') : 'SUPER_ADMIN';
         // 2. Simpan pesan chat ke database dengan roomId: 'GROUP_ADMINS' (Grup Admin Pusat)
         await models_1.ChatMessage.create({
             id: `msg_${(0, uuid_1.v4)()}`,
             villageId: data.villageId,
             senderUid: 'SYSTEM_BOT',
             senderName: 'Sistem Registrasi',
-            receiverUid: 'SUPER_ADMIN',
+            receiverUid: targetReceiverUid,
             roomId: 'GROUP_ADMINS',
             message: messageText,
             isRead: false,
@@ -62,7 +74,6 @@ const notifyAdminPusatNewVillage = async (data) => {
         });
         // 3. Kirim notifikasi FCM ke Super Admin (jika perangkat Android terdaftar dengan token FCM)
         try {
-            const superadmin = await models_1.User.findByPk('SUPER_ADMIN');
             const token = superadmin?.getDataValue('fcmToken');
             if (token) {
                 await (0, firebaseService_1.sendChatNotification)(token, 'Pendaftaran Desa Baru', `Desa "${data.villageName}" (${data.uniqueCode || '-'}) baru saja terdaftar oleh ${data.registrantName || 'Admin'}.`, 'SYSTEM_BOT', data.villageId, 'GROUP_ADMINS');
