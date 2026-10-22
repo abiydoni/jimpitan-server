@@ -424,12 +424,13 @@ const registerVillage = async (req, res) => {
             autoRenew: false
         }, { transaction });
         await transaction.commit();
-        // Kirim notifikasi otomatis ke Chat Admin Pusat
+        // Kirim notifikasi otomatis ke Chat Admin Pusat & Pendaftar Desa Baru
         (0, notificationHelper_1.notifyAdminPusatNewVillage)({
             villageId,
             villageName: villageName || 'Desa Baru',
             uniqueCode: villageCode,
             address: fullAddress || '-',
+            registrantUid: uid,
             registrantName: name || 'Admin Desa',
             registrantPhone: finalPhone || null,
             registrantEmail: sanitizedEmail || null

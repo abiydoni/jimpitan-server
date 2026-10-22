@@ -477,6 +477,7 @@ export const testVillageNotification = async (req: AuthRequest, res: Response): 
       villageName: body.villageName || 'Desa Mandiri Uji Coba',
       uniqueCode: body.uniqueCode || randomCode,
       address: body.address || 'Jl. Melati No. 12, RT 03 / RW 01',
+      registrantUid: body.registrantUid || req.firebaseUser?.uid || null,
       registrantName: body.registrantName || 'Bpk. Hendra Saputra',
       registrantPhone: body.registrantPhone || '081234567890',
       registrantEmail: body.registrantEmail || 'hendra.desa@jimpitan.id'
