@@ -205,37 +205,46 @@ export const getSuperAdminSummary = async (req: Request, res: Response): Promise
       attributes: ['id', 'villageId', 'amount', 'type', 'journalType', 'description', 'createdAt']
     });
 
-    // 5. Data Chart (Jimpitan 7 Hari Terakhir)
+    // 5. Data Chart (Registrasi Desa Baru per Hari)
+    const days = parseInt(req.query.days as string, 10) || 7;
     const chartData: any[] = [];
-    const sevenDaysAgo = new Date(now);
-    sevenDaysAgo.setDate(now.getDate() - 6);
-    
-    const jimpitanData = await JimpitanHistory.findAll({
-      where: {
-        date: {
-          [Op.between]: [sevenDaysAgo.toISOString().split('T')[0], now.toISOString().split('T')[0]]
-        }
-      },
-      attributes: ['date', 'amountCollected']
+    const startDate = new Date(now);
+    startDate.setDate(now.getDate() - (days - 1));
+    startDate.setHours(0, 0, 0, 0);
+
+    const allVillages = await Village.findAll({
+      attributes: ['id', 'name', 'createdAt'],
+      order: [['createdAt', 'ASC']]
     });
 
-    const dailyMap: Record<string, number> = {};
-    jimpitanData.forEach(j => {
-      const d = j.dataValues.date;
-      dailyMap[d] = (dailyMap[d] || 0) + Number(j.dataValues.amountCollected || 0);
+    const dailyVillageMap: Record<string, number> = {};
+    allVillages.forEach(v => {
+      const createdAt = v.getDataValue('createdAt');
+      if (createdAt) {
+        const d = new Date(createdAt);
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const dateKey = `${yyyy}-${mm}-${dd}`;
+        dailyVillageMap[dateKey] = (dailyVillageMap[dateKey] || 0) + 1;
+      }
     });
 
-    for (let i = 0; i <= 6; i++) {
-      const d = new Date(sevenDaysAgo);
-      d.setDate(sevenDaysAgo.getDate() + i);
-      const dateStr = d.toISOString().split('T')[0];
-      
+    for (let i = 0; i < days; i++) {
+      const d = new Date(startDate);
+      d.setDate(startDate.getDate() + i);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const dateKey = `${yyyy}-${mm}-${dd}`;
+
       const dayLabel = d.toLocaleDateString('id-ID', { weekday: 'short' });
       const shortDate = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
-      
+
       chartData.push({
+        date: dateKey,
         label: `${dayLabel}, ${shortDate}`,
-        value: dailyMap[dateStr] || 0
+        value: dailyVillageMap[dateKey] || 0
       });
     }
 
@@ -247,7 +256,8 @@ export const getSuperAdminSummary = async (req: Request, res: Response): Promise
         totalJimpitan: totalJimpitanGlobal || 0,
         pendingReports: recentActivitiesCount,
         recentActivities,
-        chartData
+        chartData,
+        villageChartData: chartData
       }
     });
   } catch (error: any) {
