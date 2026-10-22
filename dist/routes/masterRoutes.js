@@ -10,6 +10,7 @@ router.get('/villages', masterController_1.getVillages);
 router.get('/villages/:id', masterController_1.getVillageById);
 router.post('/villages/register', masterController_1.registerVillage);
 router.post('/villages', masterController_1.createVillage);
+router.post('/villages/:id/notify', masterController_1.notifyVillageManual);
 router.put('/villages/:id', masterController_1.updateVillage);
 router.delete('/villages/:id', masterController_1.deleteVillage);
 // Users

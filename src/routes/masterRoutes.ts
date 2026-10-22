@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { 
   getVillages, getVillageById, createVillage, updateVillage, deleteVillage, registerVillage,
+  notifyVillageManual,
   getUsers, getUserById, updateUserStatus, deleteUserFamily, saveUserFamily, linkUserAccount,
   updateFcmToken, removeFcmToken, updateOnlineStatus, updateUserRoles,
   getMenus, updateMenu, deleteMenu,
@@ -17,6 +18,7 @@ router.get('/villages', getVillages);
 router.get('/villages/:id', getVillageById);
 router.post('/villages/register', registerVillage);
 router.post('/villages', createVillage);
+router.post('/villages/:id/notify', notifyVillageManual);
 router.put('/villages/:id', updateVillage);
 router.delete('/villages/:id', deleteVillage);
 

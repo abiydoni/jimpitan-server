@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.bulkImportUsers = exports.updateOnlineStatus = exports.removeFcmToken = exports.updateFcmToken = exports.deleteSlide = exports.updateSlide = exports.createSlide = exports.getSlides = exports.deleteMenu = exports.updateMenu = exports.getMenus = exports.linkUserAccount = exports.updateUserRoles = exports.updateUserStatus = exports.deleteUser = exports.cleanupIncompleteUsers = exports.getUserById = exports.saveUserFamily = exports.moveUserFamily = exports.deleteUserFamily = exports.getUsers = exports.registerVillage = exports.deleteVillage = exports.updateVillage = exports.createVillage = exports.generateResidentUniqueCode = exports.getVillageById = exports.getVillages = void 0;
+exports.bulkImportUsers = exports.updateOnlineStatus = exports.removeFcmToken = exports.updateFcmToken = exports.deleteSlide = exports.updateSlide = exports.createSlide = exports.getSlides = exports.deleteMenu = exports.updateMenu = exports.getMenus = exports.linkUserAccount = exports.updateUserRoles = exports.updateUserStatus = exports.deleteUser = exports.cleanupIncompleteUsers = exports.getUserById = exports.saveUserFamily = exports.moveUserFamily = exports.deleteUserFamily = exports.getUsers = exports.registerVillage = exports.notifyVillageManual = exports.deleteVillage = exports.updateVillage = exports.createVillage = exports.generateResidentUniqueCode = exports.getVillageById = exports.getVillages = void 0;
 const sequelize_1 = require("sequelize");
 const models_1 = require("../models");
 const uuid_1 = require("uuid");
@@ -239,6 +239,55 @@ const deleteVillage = async (req, res) => {
     }
 };
 exports.deleteVillage = deleteVillage;
+const notifyVillageManual = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const village = await models_1.Village.findByPk(id);
+        if (!village) {
+            res.status(404).json({ success: false, message: 'Desa tidak ditemukan' });
+            return;
+        }
+        // Cari admin desa yang terdaftar untuk desa ini
+        const adminRole = await models_1.Role.findOne({
+            where: {
+                villageId: id,
+                name: 'ADMIN_DESA',
+                userId: { [sequelize_1.Op.ne]: null }
+            }
+        });
+        let registrantUser = null;
+        if (adminRole && adminRole.getDataValue('userId')) {
+            registrantUser = await models_1.User.findByPk(adminRole.getDataValue('userId'));
+        }
+        if (!registrantUser) {
+            registrantUser = await models_1.User.findOne({ where: { villageId: id } });
+        }
+        await (0, notificationHelper_1.notifyAdminPusatNewVillage)({
+            villageId: id,
+            villageName: village.getDataValue('name'),
+            uniqueCode: village.getDataValue('uniqueCode'),
+            address: village.getDataValue('address'),
+            registrantUid: registrantUser ? registrantUser.getDataValue('uid') : null,
+            registrantName: registrantUser ? registrantUser.getDataValue('name') : 'Admin Desa',
+            registrantPhone: registrantUser ? (registrantUser.getDataValue('phoneNumber') || registrantUser.getDataValue('phone')) : null,
+            registrantEmail: registrantUser ? registrantUser.getDataValue('email') : null
+        });
+        res.json({
+            success: true,
+            message: `Notifikasi chat pendaftaran desa "${village.getDataValue('name')}" berhasil dikirim!`,
+            data: {
+                villageName: village.getDataValue('name'),
+                uniqueCode: village.getDataValue('uniqueCode'),
+                registrantName: registrantUser ? registrantUser.getDataValue('name') : 'Admin Desa'
+            }
+        });
+    }
+    catch (error) {
+        console.error('Error in notifyVillageManual:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+exports.notifyVillageManual = notifyVillageManual;
 const registerVillage = async (req, res) => {
     const transaction = await models_1.sequelize.transaction();
     try {

@@ -264,6 +264,58 @@ export const deleteVillage = async (req: Request, res: Response): Promise<void> 
   }
 };
 
+export const notifyVillageManual = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const village = await Village.findByPk(id as string);
+    if (!village) {
+      res.status(404).json({ success: false, message: 'Desa tidak ditemukan' });
+      return;
+    }
+
+    // Cari admin desa yang terdaftar untuk desa ini
+    const adminRole = await Role.findOne({
+      where: {
+        villageId: id,
+        name: 'ADMIN_DESA',
+        userId: { [Op.ne]: null }
+      }
+    });
+
+    let registrantUser: any = null;
+    if (adminRole && adminRole.getDataValue('userId')) {
+      registrantUser = await User.findByPk(adminRole.getDataValue('userId'));
+    }
+    if (!registrantUser) {
+      registrantUser = await User.findOne({ where: { villageId: id } });
+    }
+
+    await notifyAdminPusatNewVillage({
+      villageId: id as string,
+      villageName: village.getDataValue('name'),
+      uniqueCode: village.getDataValue('uniqueCode'),
+      address: village.getDataValue('address'),
+      registrantUid: registrantUser ? registrantUser.getDataValue('uid') : null,
+      registrantName: registrantUser ? registrantUser.getDataValue('name') : 'Admin Desa',
+      registrantPhone: registrantUser ? (registrantUser.getDataValue('phoneNumber') || registrantUser.getDataValue('phone')) : null,
+      registrantEmail: registrantUser ? registrantUser.getDataValue('email') : null
+    });
+
+    res.json({
+      success: true,
+      message: `Notifikasi chat pendaftaran desa "${village.getDataValue('name')}" berhasil dikirim!`,
+      data: {
+        villageName: village.getDataValue('name'),
+        uniqueCode: village.getDataValue('uniqueCode'),
+        registrantName: registrantUser ? registrantUser.getDataValue('name') : 'Admin Desa'
+      }
+    });
+  } catch (error: any) {
+    console.error('Error in notifyVillageManual:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export const registerVillage = async (req: Request, res: Response): Promise<void> => {
   const transaction = await sequelize.transaction();
   try {
