@@ -179,6 +179,12 @@ const getSuperAdminSummary = async (req, res) => {
             limit: 10,
             attributes: ['id', 'villageId', 'amount', 'type', 'journalType', 'description', 'createdAt']
         });
+        // Pendaftar Desa Terbaru
+        const recentVillages = await models_1.Village.findAll({
+            order: [['createdAt', 'DESC']],
+            limit: 8,
+            attributes: ['id', 'name', 'uniqueCode', 'address', 'createdAt']
+        });
         // 5. Data Chart (Registrasi Desa Baru per Hari)
         const days = parseInt(req.query.days, 10) || 7;
         const chartData = [];
@@ -224,6 +230,7 @@ const getSuperAdminSummary = async (req, res) => {
                 totalJimpitan: totalJimpitanGlobal || 0,
                 pendingReports: recentActivitiesCount,
                 recentActivities,
+                recentVillages,
                 chartData,
                 villageChartData: chartData
             }

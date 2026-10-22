@@ -205,6 +205,13 @@ export const getSuperAdminSummary = async (req: Request, res: Response): Promise
       attributes: ['id', 'villageId', 'amount', 'type', 'journalType', 'description', 'createdAt']
     });
 
+    // Pendaftar Desa Terbaru
+    const recentVillages = await Village.findAll({
+      order: [['createdAt', 'DESC']],
+      limit: 8,
+      attributes: ['id', 'name', 'uniqueCode', 'address', 'createdAt']
+    });
+
     // 5. Data Chart (Registrasi Desa Baru per Hari)
     const days = parseInt(req.query.days as string, 10) || 7;
     const chartData: any[] = [];
@@ -256,6 +263,7 @@ export const getSuperAdminSummary = async (req: Request, res: Response): Promise
         totalJimpitan: totalJimpitanGlobal || 0,
         pendingReports: recentActivitiesCount,
         recentActivities,
+        recentVillages,
         chartData,
         villageChartData: chartData
       }
