@@ -15,13 +15,14 @@ export interface NewVillageNotificationData {
 }
 
 /**
- * Mengirim 2 pesan notifikasi pendaftaran desa baru:
- * 1. Pesan rincian pendaftaran ke Akun Appsbee (Super Admin) di room GROUP_ADMINS & FCM.
- * 2. Pesan sambutan & panduan resmi langsung ke Pendaftar Desa Baru dari Appsbee Support & FCM.
+ * Mengirim 2 pesan notifikasi pendaftaran desa baru secara MURNI PERSONAL:
+ * 1. Pesan rincian pendaftaran ke Akun Appsbee (Super Admin) via chat personal & FCM.
+ * 2. Pesan sambutan & panduan resmi langsung ke Pendaftar Desa Baru dari Appsbee Support via chat personal & FCM.
+ * (Tidak menggunakan ruang GROUP_ADMINS).
  */
 export const notifyAdminPusatNewVillage = async (data: NewVillageNotificationData): Promise<void> => {
   try {
-    // 1. Pastikan akun SYSTEM_BOT ada di database untuk identitas pengirim notifikasi sistem
+    // 1. Pastikan akun SYSTEM_BOT ada di database untuk fallback identitas pengirim sistem
     await User.findOrCreate({
       where: { uid: 'SYSTEM_BOT' },
       defaults: {
@@ -44,7 +45,7 @@ export const notifyAdminPusatNewVillage = async (data: NewVillageNotificationDat
       minute: '2-digit'
     });
 
-    // Cari superadmin penerima (bisa 'SUPER_ADMIN', akun appsbeem@gmail.com, atau via role SUPER_ADMIN)
+    // 2. Cari akun Super Admin resmi (Appsbee)
     let superadmin = await User.findByPk('SUPER_ADMIN');
     if (!superadmin) {
       superadmin = await User.findOne({ where: { email: 'appsbeem@gmail.com' } });
@@ -57,8 +58,27 @@ export const notifyAdminPusatNewVillage = async (data: NewVillageNotificationDat
     }
     const appsbeeUid = superadmin ? superadmin.getDataValue('uid') : 'SUPER_ADMIN';
 
+    // 3. Cari pendaftar desa baru (registrantUid atau admin desa terkait)
+    let targetRegistrantUid = data.registrantUid;
+    if (!targetRegistrantUid) {
+      const adminRole = await Role.findOne({
+        where: {
+          villageId: data.villageId,
+          name: 'ADMIN_DESA',
+          userId: { [Op.ne]: null }
+        }
+      });
+      if (adminRole && adminRole.getDataValue('userId')) {
+        targetRegistrantUid = adminRole.getDataValue('userId');
+      }
+    }
+
+    const targetPartnerUid = targetRegistrantUid || 'SYSTEM_BOT';
+    const partnerSenderName = data.registrantName || (targetRegistrantUid ? 'Admin Desa' : 'Sistem Registrasi');
+    const personalRoomId = `PERSONAL_${[appsbeeUid, targetPartnerUid].sort().join('_')}`;
+
     // =========================================================================
-    // PESAN 1: Notifikasi ke Akun Appsbee (Super Admin) di GROUP_ADMINS
+    // PESAN 1: Notifikasi Rincian Pendaftaran ke Akun Appsbee (Super Admin Personal)
     // =========================================================================
     const adminLines = [
       '🏛️ *PENDAFTARAN DESA BARU*',
@@ -80,10 +100,10 @@ export const notifyAdminPusatNewVillage = async (data: NewVillageNotificationDat
     await Message.create({
       id: `msg_${uuidv4()}`,
       villageId: data.villageId,
-      senderUid: 'SYSTEM_BOT',
-      senderName: 'Sistem Registrasi',
+      senderUid: targetPartnerUid,
+      senderName: partnerSenderName,
       receiverUid: appsbeeUid,
-      roomId: 'GROUP_ADMINS',
+      roomId: personalRoomId, // Murni chat personal, bukan GROUP_ADMINS
       message: adminMessageText,
       isRead: false,
       isDeleted: false,
@@ -91,42 +111,27 @@ export const notifyAdminPusatNewVillage = async (data: NewVillageNotificationDat
       isForwarded: false
     });
 
-    // Kirim notifikasi FCM ke perangkat Super Admin
+    // Push notifikasi FCM personal ke perangkat Super Admin
     try {
       const token = superadmin?.getDataValue('fcmToken');
       if (token) {
         await sendChatNotification(
           token,
-          'Pendaftaran Desa Baru',
-          `Desa "${data.villageName}" (${data.uniqueCode || '-'}) baru saja terdaftar oleh ${data.registrantName || 'Admin'}.`,
-          'SYSTEM_BOT',
+          partnerSenderName,
+          `Pendaftaran Desa Baru: ${data.villageName} (${data.uniqueCode || '-'})`,
+          targetPartnerUid,
           data.villageId,
-          'GROUP_ADMINS'
+          personalRoomId
         );
       }
     } catch (fcmErr) {
       console.warn('Gagal mengirim FCM notifikasi desa baru ke superadmin:', fcmErr);
     }
-    console.log(`✅ [Notification 1/2] Notifikasi desa [${data.villageName}] terkirim ke Akun Appsbee / Admin Pusat.`);
+    console.log(`✅ [Notification 1/2] Notifikasi pendaftaran terkirim ke Akun Appsbee (Personal Chat) [${personalRoomId}].`);
 
     // =========================================================================
-    // PESAN 2: Notifikasi Sambutan & Panduan ke Pendaftar Desa Baru
+    // PESAN 2: Sambutan & Panduan Resmi ke Pendaftar Desa Baru (Personal Chat)
     // =========================================================================
-    let targetRegistrantUid = data.registrantUid;
-    if (!targetRegistrantUid) {
-      // Jika tidak diteruskan eksplisit, cari user ADMIN_DESA yang terdaftar untuk desa ini
-      const adminRole = await Role.findOne({
-        where: {
-          villageId: data.villageId,
-          name: 'ADMIN_DESA',
-          userId: { [Op.ne]: null }
-        }
-      });
-      if (adminRole && adminRole.getDataValue('userId')) {
-        targetRegistrantUid = adminRole.getDataValue('userId');
-      }
-    }
-
     if (targetRegistrantUid) {
       const registrantUser = await User.findByPk(targetRegistrantUid);
       const recipientName = data.registrantName || registrantUser?.getDataValue('name') || 'Admin Desa';
@@ -154,7 +159,6 @@ export const notifyAdminPusatNewVillage = async (data: NewVillageNotificationDat
       ];
 
       const welcomeMessageText = welcomeLines.join('\n');
-      const personalRoomId = `PERSONAL_${[appsbeeUid, targetRegistrantUid].sort().join('_')}`;
 
       await Message.create({
         id: `msg_${uuidv4()}`,
@@ -162,7 +166,7 @@ export const notifyAdminPusatNewVillage = async (data: NewVillageNotificationDat
         senderUid: appsbeeUid,
         senderName: 'Appsbee Support',
         receiverUid: targetRegistrantUid,
-        roomId: personalRoomId,
+        roomId: personalRoomId, // Personal chat yang sama
         message: welcomeMessageText,
         isRead: false,
         isDeleted: false,
@@ -170,7 +174,7 @@ export const notifyAdminPusatNewVillage = async (data: NewVillageNotificationDat
         isForwarded: false
       });
 
-      // Kirim push notifikasi FCM ke HP pendaftar desa baru
+      // Push notifikasi FCM personal ke HP pendaftar desa baru
       try {
         const registrantToken = registrantUser?.getDataValue('fcmToken');
         if (registrantToken) {
@@ -186,7 +190,7 @@ export const notifyAdminPusatNewVillage = async (data: NewVillageNotificationDat
       } catch (fcmRegErr) {
         console.warn('Gagal mengirim FCM sambutan ke pendaftar desa baru:', fcmRegErr);
       }
-      console.log(`✅ [Notification 2/2] Pesan sambutan terkirim ke pendaftar desa [${recipientName} (${targetRegistrantUid})].`);
+      console.log(`✅ [Notification 2/2] Pesan sambutan terkirim ke Pendaftar Desa [${recipientName} (${targetRegistrantUid})].`);
     } else {
       console.log(`ℹ️ [Notification 2/2] UID pendaftar tidak tersedia, pesan sambutan personal dilewati.`);
     }
