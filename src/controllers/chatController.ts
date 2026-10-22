@@ -1,4 +1,4 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import { User, sequelize, ChatMessage as Message, GroupReadState } from '../models';
 import { Op } from 'sequelize';
@@ -462,6 +462,26 @@ export const markMessagesRead = async (req: AuthRequest, res: Response): Promise
     }
 
     res.json({ success: true, message: 'Pesan ditandai terbaca' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const testVillageNotification = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { notifyAdminPusatNewVillage } = require('../utils/notificationHelper');
+    const randomCode = Math.floor(10000 + Math.random() * 90000).toString();
+    const body = (req.body && typeof req.body === 'object') ? req.body : {};
+    await notifyAdminPusatNewVillage({
+      villageId: `test_village_${Date.now()}`,
+      villageName: body.villageName || 'Desa Mandiri Uji Coba',
+      uniqueCode: body.uniqueCode || randomCode,
+      address: body.address || 'Jl. Melati No. 12, RT 03 / RW 01',
+      registrantName: body.registrantName || 'Bpk. Hendra Saputra',
+      registrantPhone: body.registrantPhone || '081234567890',
+      registrantEmail: body.registrantEmail || 'hendra.desa@jimpitan.id'
+    });
+    res.json({ success: true, message: 'Notifikasi berhasil dikirim ke Grup Admin Pusat' });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }

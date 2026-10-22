@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.markMessagesRead = exports.getUnreadCounts = exports.updateMessage = exports.getMessages = exports.getChatContacts = exports.sendMessage = void 0;
+exports.testVillageNotification = exports.markMessagesRead = exports.getUnreadCounts = exports.updateMessage = exports.getMessages = exports.getChatContacts = exports.sendMessage = void 0;
 const models_1 = require("../models");
 const sequelize_1 = require("sequelize");
 const firebaseService_1 = require("../services/firebaseService");
@@ -411,3 +411,24 @@ const markMessagesRead = async (req, res) => {
     }
 };
 exports.markMessagesRead = markMessagesRead;
+const testVillageNotification = async (req, res) => {
+    try {
+        const { notifyAdminPusatNewVillage } = require('../utils/notificationHelper');
+        const randomCode = Math.floor(10000 + Math.random() * 90000).toString();
+        const body = (req.body && typeof req.body === 'object') ? req.body : {};
+        await notifyAdminPusatNewVillage({
+            villageId: `test_village_${Date.now()}`,
+            villageName: body.villageName || 'Desa Mandiri Uji Coba',
+            uniqueCode: body.uniqueCode || randomCode,
+            address: body.address || 'Jl. Melati No. 12, RT 03 / RW 01',
+            registrantName: body.registrantName || 'Bpk. Hendra Saputra',
+            registrantPhone: body.registrantPhone || '081234567890',
+            registrantEmail: body.registrantEmail || 'hendra.desa@jimpitan.id'
+        });
+        res.json({ success: true, message: 'Notifikasi berhasil dikirim ke Grup Admin Pusat' });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+exports.testVillageNotification = testVillageNotification;

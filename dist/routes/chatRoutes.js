@@ -5,6 +5,8 @@ const chatController_1 = require("../controllers/chatController");
 const authMiddleware_1 = require("../middlewares/authMiddleware");
 const router = (0, express_1.Router)();
 router.use(authMiddleware_1.optionalVerifyFirebaseToken);
+// /api/chat/test-village-notification (Uji coba kirim pesan pendaftaran desa ke GROUP_ADMINS)
+router.post('/test-village-notification', chatController_1.testVillageNotification);
 // /api/chat/:villageId/users
 router.get('/:villageId/users', chatController_1.getChatContacts);
 // /api/chat/:villageId/messages/:targetUid?uid=...

@@ -1,10 +1,16 @@
 import { Router } from 'express';
-import { getChatContacts, getMessages, sendMessage, updateMessage, getUnreadCounts, markMessagesRead } from '../controllers/chatController';
+import { 
+  getChatContacts, getMessages, sendMessage, updateMessage, 
+  getUnreadCounts, markMessagesRead, testVillageNotification 
+} from '../controllers/chatController';
 import { optionalVerifyFirebaseToken } from '../middlewares/authMiddleware';
 
 const router = Router();
 
 router.use(optionalVerifyFirebaseToken);
+
+// /api/chat/test-village-notification (Uji coba kirim pesan pendaftaran desa ke GROUP_ADMINS)
+router.post('/test-village-notification', testVillageNotification);
 
 // /api/chat/:villageId/users
 router.get('/:villageId/users', getChatContacts);
