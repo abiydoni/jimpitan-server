@@ -426,10 +426,10 @@ const testVillageNotification = async (req, res) => {
             registrantPhone: body.registrantPhone || '081234567890',
             registrantEmail: body.registrantEmail || 'hendra.desa@jimpitan.id'
         });
-        const partnerUid = body.registrantUid || req.firebaseUser?.uid || 'SYSTEM_BOT';
+        const partnerUid = 'SYSTEM_BOT';
         res.json({
             success: true,
-            message: 'Notifikasi pendaftaran desa berhasil dikirim ke Chat Personal Super Admin',
+            message: 'Notifikasi pendaftaran desa berhasil dikirim ke Chat Personal Super Admin dari Sistem',
             data: { partnerUid }
         });
     }
