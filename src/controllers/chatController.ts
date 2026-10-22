@@ -213,7 +213,7 @@ export const getMessages = async (req: AuthRequest, res: Response): Promise<void
     if (roomId && typeof roomId === 'string' && roomId.startsWith('GROUP_')) {
       // Logika untuk mengambil pesan grup
       whereClause = { roomId };
-      if (villageId !== 'ALL') {
+      if (villageId !== 'ALL' && roomId !== 'GROUP_ADMINS') {
         whereClause.villageId = {
           [Op.or]: [villageId, null]
         };

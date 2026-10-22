@@ -183,7 +183,7 @@ const getMessages = async (req, res) => {
         if (roomId && typeof roomId === 'string' && roomId.startsWith('GROUP_')) {
             // Logika untuk mengambil pesan grup
             whereClause = { roomId };
-            if (villageId !== 'ALL') {
+            if (villageId !== 'ALL' && roomId !== 'GROUP_ADMINS') {
                 whereClause.villageId = {
                     [sequelize_1.Op.or]: [villageId, null]
                 };
