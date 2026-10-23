@@ -14,7 +14,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sequelize = exports.WaBlastHistory = exports.SystemSetting = exports.JimpitanHistory = exports.DuesJournal = exports.InventoryLoan = exports.InventoryItem = exports.Exemption = exports.Tariff = exports.Schedule = exports.Slide = exports.GroupReadState = exports.ChatMessage = exports.Menu = exports.UserRole = exports.Role = exports.User = exports.Village = void 0;
+exports.sequelize = exports.ActivityLog = exports.WaBlastHistory = exports.SystemSetting = exports.JimpitanHistory = exports.DuesJournal = exports.InventoryLoan = exports.InventoryItem = exports.Exemption = exports.Tariff = exports.Schedule = exports.Slide = exports.GroupReadState = exports.ChatMessage = exports.Menu = exports.UserRole = exports.Role = exports.User = exports.Village = void 0;
 const sequelize_1 = require("sequelize");
 const database_1 = require("../config/database");
 Object.defineProperty(exports, "sequelize", { enumerable: true, get: function () { return database_1.sequelize; } });
@@ -366,3 +366,27 @@ WaBlastHistory.init({
 // WaBlastHistory milik Village
 Village.hasMany(WaBlastHistory, { foreignKey: 'villageId', constraints: false });
 WaBlastHistory.belongsTo(Village, { foreignKey: 'villageId', constraints: false });
+// ---------------------------
+// 12. Model ActivityLog (Log Audit Aktivitas Pengguna)
+// ---------------------------
+class ActivityLog extends sequelize_1.Model {
+}
+exports.ActivityLog = ActivityLog;
+ActivityLog.init({
+    id: { type: sequelize_1.DataTypes.STRING(128), primaryKey: true, defaultValue: sequelize_1.DataTypes.UUIDV4 },
+    villageId: { type: sequelize_1.DataTypes.STRING(128), allowNull: true },
+    userId: { type: sequelize_1.DataTypes.STRING(128), allowNull: true },
+    userName: { type: sequelize_1.DataTypes.STRING(255), allowNull: true },
+    userEmail: { type: sequelize_1.DataTypes.STRING(255), allowNull: true },
+    userRole: { type: sequelize_1.DataTypes.STRING(100), allowNull: true },
+    action: { type: sequelize_1.DataTypes.STRING(100), allowNull: false },
+    targetId: { type: sequelize_1.DataTypes.STRING(128), allowNull: true },
+    targetName: { type: sequelize_1.DataTypes.STRING(255), allowNull: true },
+    description: { type: sequelize_1.DataTypes.TEXT, allowNull: false },
+    details: { type: sequelize_1.DataTypes.JSON, allowNull: true },
+    ip: { type: sequelize_1.DataTypes.STRING(50), allowNull: true },
+    userAgent: { type: sequelize_1.DataTypes.STRING(255), allowNull: true },
+}, { sequelize: database_1.sequelize, modelName: 'activityLog', tableName: 'activity_logs', timestamps: true });
+// ActivityLog milik Village
+Village.hasMany(ActivityLog, { foreignKey: 'villageId', constraints: false });
+ActivityLog.belongsTo(Village, { foreignKey: 'villageId', constraints: false });

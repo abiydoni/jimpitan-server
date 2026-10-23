@@ -1,11 +1,12 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.bulkImportUsers = exports.updateOnlineStatus = exports.removeFcmToken = exports.updateFcmToken = exports.deleteSlide = exports.updateSlide = exports.createSlide = exports.getSlides = exports.deleteMenu = exports.updateMenu = exports.getMenus = exports.linkUserAccount = exports.updateUserRoles = exports.updateUserStatus = exports.deleteUser = exports.cleanupIncompleteUsers = exports.getUserById = exports.saveUserFamily = exports.moveUserFamily = exports.deleteUserFamily = exports.getUsers = exports.registerVillage = exports.notifyVillageManual = exports.deleteVillage = exports.updateVillage = exports.createVillage = exports.generateResidentUniqueCode = exports.getVillageById = exports.getVillages = void 0;
+exports.getActivityLogs = exports.bulkImportUsers = exports.updateOnlineStatus = exports.removeFcmToken = exports.updateFcmToken = exports.deleteSlide = exports.updateSlide = exports.createSlide = exports.getSlides = exports.deleteMenu = exports.updateMenu = exports.getMenus = exports.linkUserAccount = exports.updateUserRoles = exports.updateUserStatus = exports.deleteUser = exports.cleanupIncompleteUsers = exports.getUserById = exports.saveUserFamily = exports.moveUserFamily = exports.deleteUserFamily = exports.getUsers = exports.registerVillage = exports.notifyVillageManual = exports.deleteVillage = exports.updateVillage = exports.createVillage = exports.generateResidentUniqueCode = exports.getVillageById = exports.getVillages = void 0;
 const sequelize_1 = require("sequelize");
 const models_1 = require("../models");
 const uuid_1 = require("uuid");
 const jakartaTime_1 = require("../utils/jakartaTime");
 const notificationHelper_1 = require("../utils/notificationHelper");
+const activityLogger_1 = require("../utils/activityLogger");
 // Villages
 const getVillages = async (req, res) => {
     try {
@@ -473,6 +474,19 @@ const registerVillage = async (req, res) => {
             autoRenew: false
         }, { transaction });
         await transaction.commit();
+        (0, activityLogger_1.logActivity)({
+            villageId,
+            userId: uid,
+            userName: name || 'Admin Desa',
+            userEmail: sanitizedEmail,
+            userRole: 'ADMIN_DESA',
+            action: 'REGISTER_VILLAGE',
+            targetId: villageId,
+            targetName: villageName,
+            description: `Admin "${name || 'Admin Desa'}" mendaftarkan desa baru "${villageName}" (Kode: ${villageCode})`,
+            details: { villageId, villageCode, fullAddress, phone: finalPhone, email: sanitizedEmail },
+            req,
+        });
         // Kirim notifikasi otomatis ke Chat Admin Pusat & Pendaftar Desa Baru
         (0, notificationHelper_1.notifyAdminPusatNewVillage)({
             villageId,
@@ -625,10 +639,20 @@ const deleteUserFamily = async (req, res) => {
         const toDelete = await models_1.User.findAll({ where: whereClause });
         console.log(`[deleteUserFamily] Menghapus ${toDelete.length} user (familyId=${familyId}, villageId=${targetVillageId}): ${toDelete.map((u) => `${u.getDataValue('uid')}(${u.getDataValue('name')})`).join(', ')}`);
         const deletedUids = toDelete.map((u) => u.getDataValue('uid'));
+        const deletedNames = toDelete.map((u) => u.getDataValue('name')).join(', ');
         if (deletedUids.length > 0) {
             await models_1.Role.destroy({ where: { userId: deletedUids } });
         }
         await models_1.User.destroy({ where: whereClause });
+        (0, activityLogger_1.logActivity)({
+            villageId: String(targetVillageId || ''),
+            action: 'DELETE_FAMILY',
+            targetId: String(familyId || ''),
+            targetName: deletedNames || String(familyId || ''),
+            description: `Penghapusan data keluarga (familyId: ${familyId}, noKK: ${noKK || '-'}) berisi ${toDelete.length} warga: ${deletedNames}`,
+            details: { familyId, noKK, deletedUids, villageId: targetVillageId },
+            req,
+        });
         const firebaseService = require('../services/firebaseService');
         try {
             firebaseService.sendSyncNotification(targetVillageId || 'all', 'REFRESH_USERS');
@@ -872,6 +896,15 @@ const saveUserFamily = async (req, res) => {
             }
         }
         await transaction.commit();
+        (0, activityLogger_1.logActivity)({
+            villageId: villageId || '',
+            action: 'SAVE_FAMILY',
+            targetId: resolvedFamilyId || familyId || '',
+            targetName: `KK ${familyNoKK}`,
+            description: `Penyimpanan data keluarga KK ${familyNoKK} (${Array.isArray(familyMembers) ? familyMembers.length : 0} anggota keluarga, ${deletedDocIds?.length || 0} dihapus)`,
+            details: { familyId: resolvedFamilyId, noKK: familyNoKK, memberCount: familyMembers?.length, deletedDocIds },
+            req,
+        });
         res.json({ success: true, message: 'Family saved successfully' });
     }
     catch (error) {
@@ -1007,6 +1040,13 @@ const cleanupIncompleteUsers = async (req, res) => {
         }
         await models_1.Role.destroy({ where: { userId: uids } });
         const deletedCount = await models_1.User.destroy({ where: { uid: uids } });
+        (0, activityLogger_1.logActivity)({
+            villageId: null,
+            action: 'CLEANUP_USERS',
+            description: `Membersihkan ${deletedCount} akun berstatus INCOMPLETE tanpa desa`,
+            details: { deletedUids: uids, count: deletedCount },
+            req,
+        });
         res.json({
             success: true,
             message: `Berhasil membersihkan ${deletedCount} akun incomplete`,
@@ -1031,8 +1071,19 @@ const deleteUser = async (req, res) => {
             res.status(403).json({ success: false, message: 'Tidak dapat menghapus akun Super Admin' });
             return;
         }
+        const userName = user.getDataValue('name') || user.getDataValue('email');
+        const userVillageId = user.getDataValue('villageId');
         await models_1.Role.destroy({ where: { userId: uid } });
         await models_1.User.destroy({ where: { uid } });
+        (0, activityLogger_1.logActivity)({
+            villageId: userVillageId,
+            action: 'DELETE_USER',
+            targetId: uid,
+            targetName: userName,
+            description: `Penghapusan data pengguna "${userName}" (UID: ${uid})`,
+            details: { uid, name: userName, email },
+            req,
+        });
         res.json({ success: true, message: 'User berhasil dihapus' });
     }
     catch (error) {
@@ -1085,6 +1136,15 @@ const updateUserStatus = async (req, res) => {
                     ...(primaryFamilyId ? [{ familyId: primaryFamilyId }] : [])
                 ]
             }
+        });
+        (0, activityLogger_1.logActivity)({
+            villageId: villageId || users[0]?.getDataValue('villageId'),
+            action: 'UPDATE_STATUS',
+            targetId: uid,
+            targetName: users[0]?.getDataValue('name') || uid,
+            description: `Status pengguna "${users[0]?.getDataValue('name') || uid}" diubah menjadi "${status}"`,
+            details: { uid, status, villageId, updatedUserCount: users.length },
+            req,
         });
         const targetVillageId = villageId || users[0].getDataValue('villageId') || 'all';
         try {
@@ -1235,6 +1295,15 @@ const linkUserAccount = async (req, res) => {
             await pendingUser.save({ transaction });
         }
         await transaction.commit();
+        (0, activityLogger_1.logActivity)({
+            villageId: villageIdVal,
+            action: 'LINK_ACCOUNT',
+            targetId: pendingUid,
+            targetName: name,
+            description: `Menautkan akun pendaftar "${pendingUser.getDataValue('name') || email}" ke data warga lama "${targetUser.getDataValue('name')}" (NIK: ${nik || '-'}). Record offline lama digantikan dengan akun pendaftar.`,
+            details: { pendingUid, targetUid, email, nik, noKK, name },
+            req,
+        });
         try {
             const firebaseService = require('../services/firebaseService');
             firebaseService.sendSyncNotification(villageIdVal || 'all', 'REFRESH_USERS');
@@ -1478,6 +1547,13 @@ const bulkImportUsers = async (req, res) => {
             }
         }
         await transaction.commit();
+        (0, activityLogger_1.logActivity)({
+            villageId: villageId || '',
+            action: 'IMPORT_USERS',
+            description: `Import data warga sebanyak ${Array.isArray(users) ? users.length : 0} orang ke desa ${villageId || ''}`,
+            details: { count: Array.isArray(users) ? users.length : 0, villageId },
+            req,
+        });
         res.json({ success: true, message: 'Users imported successfully' });
     }
     catch (error) {
@@ -1495,3 +1571,53 @@ const bulkImportUsers = async (req, res) => {
     }
 };
 exports.bulkImportUsers = bulkImportUsers;
+/**
+ * Mengambil Riwayat Log Aktivitas Pengguna (Audit Trail)
+ * GET /api/master/activity-logs
+ */
+const getActivityLogs = async (req, res) => {
+    try {
+        const { villageId, action, search, limit = '50', page = '1' } = req.query;
+        const limitNum = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+        const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+        const offset = (pageNum - 1) * limitNum;
+        const whereClause = {};
+        if (villageId && villageId !== 'ALL') {
+            whereClause.villageId = villageId;
+        }
+        if (action && action !== 'ALL') {
+            whereClause.action = action;
+        }
+        if (search) {
+            const q = `%${search}%`;
+            whereClause[sequelize_1.Op.or] = [
+                { userName: { [sequelize_1.Op.like]: q } },
+                { userEmail: { [sequelize_1.Op.like]: q } },
+                { targetName: { [sequelize_1.Op.like]: q } },
+                { description: { [sequelize_1.Op.like]: q } },
+                { action: { [sequelize_1.Op.like]: q } },
+            ];
+        }
+        const { count, rows } = await models_1.ActivityLog.findAndCountAll({
+            where: whereClause,
+            order: [['createdAt', 'DESC']],
+            limit: limitNum,
+            offset,
+            include: [
+                { model: models_1.Village, attributes: ['id', 'name', 'uniqueCode'], required: false }
+            ]
+        });
+        res.json({
+            success: true,
+            data: rows,
+            total: count,
+            page: pageNum,
+            limit: limitNum,
+            totalPages: Math.ceil(count / limitNum),
+        });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+exports.getActivityLogs = getActivityLogs;

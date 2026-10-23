@@ -5,6 +5,8 @@ const masterController_1 = require("../controllers/masterController");
 const saasMiddleware_1 = require("../middlewares/saasMiddleware");
 const router = (0, express_1.Router)();
 router.use(saasMiddleware_1.checkSubscription);
+// Activity Logs (Audit Trail)
+router.get('/activity-logs', masterController_1.getActivityLogs);
 // Villages
 router.get('/villages', masterController_1.getVillages);
 router.get('/villages/:id', masterController_1.getVillageById);

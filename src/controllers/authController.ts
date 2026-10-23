@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Op } from 'sequelize';
 import { User, Role, Village } from '../models';
 import { AuthRequest } from '../middlewares/authMiddleware';
+import { logActivity } from '../utils/activityLogger';
 
 const superAdminEmail = () => process.env.SUPERADMIN_EMAIL || 'appsbeem@gmail.com';
 
@@ -148,6 +149,16 @@ export const loginSync = async (req: Request, res: Response): Promise<void> => {
         } else {
           // Jangan buat record di database jika user baru dan belum memilih/memasukkan kode desa valid.
           // Kembalikan null data sehingga Flutter AuthWrapper langsung mengarahkan ke JoinVillagePage / VillageRegistrationPage
+          logActivity({
+            villageId: null,
+            userId: uid,
+            userName: name || null,
+            userEmail: email,
+            action: 'LOGIN_PENDING_VILLAGE',
+            description: `User "${name || email}" berhasil autentikasi Google, belum memilih/terdaftar di desa`,
+            req,
+          });
+
           res.status(200).json({
             success: true,
             message: 'User authenticated, pending village selection',
@@ -163,6 +174,18 @@ export const loginSync = async (req: Request, res: Response): Promise<void> => {
         { model: Role, as: 'roles', attributes: ['id', 'name', 'villageId'] },
         { model: Village },
       ],
+    });
+
+    const userRoleNames = (userWithRoles as any)?.roles?.map((r: any) => r.name).join(', ') || 'WARGA';
+    logActivity({
+      villageId: userWithRoles?.getDataValue('villageId') || null,
+      userId: uid,
+      userName: userWithRoles?.getDataValue('name') || name || null,
+      userEmail: email,
+      userRole: userRoleNames,
+      action: 'LOGIN',
+      description: `Pengguna "${userWithRoles?.getDataValue('name') || email}" (${userRoleNames}) login ke aplikasi`,
+      req,
     });
 
     res.status(200).json({
@@ -281,6 +304,20 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
         include: [
           { model: Role, as: 'roles', attributes: ['id', 'name', 'villageId'] },
         ],
+      });
+
+      logActivity({
+        villageId,
+        userId: uid as string,
+        userName: user.getDataValue('name'),
+        userEmail: user.getDataValue('email'),
+        userRole: 'WARGA',
+        action: 'JOIN_VILLAGE_PENDING',
+        targetId: uid as string,
+        targetName: user.getDataValue('name'),
+        description: `Warga "${user.getDataValue('name')}" mengajukan pendaftaran gabung ke desa "${village.getDataValue('name')}" (status: PENDING)`,
+        details: { noKK: user.getDataValue('noKK'), nik: user.getDataValue('nik'), phone: user.getDataValue('phoneNumber') },
+        req,
       });
 
       res.status(200).json({
@@ -548,6 +585,20 @@ export const claimAccount = async (req: Request, res: Response): Promise<void> =
       include: [
         { model: Role, as: 'roles', attributes: ['id', 'name', 'villageId'] },
       ],
+    });
+
+    logActivity({
+      villageId,
+      userId: uid,
+      userName: inputName || registeredName,
+      userEmail: email,
+      userRole: 'WARGA',
+      action: 'CLAIM_ACCOUNT',
+      targetId: uid,
+      targetName: inputName || registeredName,
+      description: `Warga "${inputName || registeredName}" menyinkronkan akun Google (${email}) dengan data NIK ${cleanNik}`,
+      details: { oldUid, newUid: uid, nik: cleanNik },
+      req,
     });
 
     res.json({

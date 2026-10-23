@@ -6,12 +6,16 @@ import {
   updateFcmToken, removeFcmToken, updateOnlineStatus, updateUserRoles,
   getMenus, updateMenu, deleteMenu,
   getSlides, createSlide, updateSlide, deleteSlide,
-  bulkImportUsers, moveUserFamily, cleanupIncompleteUsers, deleteUser
+  bulkImportUsers, moveUserFamily, cleanupIncompleteUsers, deleteUser,
+  getActivityLogs
 } from '../controllers/masterController';
 import { checkSubscription } from '../middlewares/saasMiddleware';
 
 const router = Router();
 router.use(checkSubscription);
+
+// Activity Logs (Audit Trail)
+router.get('/activity-logs', getActivityLogs);
 
 // Villages
 router.get('/villages', getVillages);

@@ -26,6 +26,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.claimAccount = exports.getUsersByVillage = exports.checkVillageCode = exports.updateProfile = exports.syncUser = exports.loginSync = exports.registerUser = void 0;
 const sequelize_1 = require("sequelize");
 const models_1 = require("../models");
+const activityLogger_1 = require("../utils/activityLogger");
 const superAdminEmail = () => process.env.SUPERADMIN_EMAIL || 'appsbeem@gmail.com';
 const PROFILE_FIELDS = [
     'name', 'photoUrl', 'foto', 'status', 'villageId', 'phoneNumber',
@@ -155,6 +156,15 @@ const loginSync = async (req, res) => {
                 else {
                     // Jangan buat record di database jika user baru dan belum memilih/memasukkan kode desa valid.
                     // Kembalikan null data sehingga Flutter AuthWrapper langsung mengarahkan ke JoinVillagePage / VillageRegistrationPage
+                    (0, activityLogger_1.logActivity)({
+                        villageId: null,
+                        userId: uid,
+                        userName: name || null,
+                        userEmail: email,
+                        action: 'LOGIN_PENDING_VILLAGE',
+                        description: `User "${name || email}" berhasil autentikasi Google, belum memilih/terdaftar di desa`,
+                        req,
+                    });
                     res.status(200).json({
                         success: true,
                         message: 'User authenticated, pending village selection',
@@ -169,6 +179,17 @@ const loginSync = async (req, res) => {
                 { model: models_1.Role, as: 'roles', attributes: ['id', 'name', 'villageId'] },
                 { model: models_1.Village },
             ],
+        });
+        const userRoleNames = userWithRoles?.roles?.map((r) => r.name).join(', ') || 'WARGA';
+        (0, activityLogger_1.logActivity)({
+            villageId: userWithRoles?.getDataValue('villageId') || null,
+            userId: uid,
+            userName: userWithRoles?.getDataValue('name') || name || null,
+            userEmail: email,
+            userRole: userRoleNames,
+            action: 'LOGIN',
+            description: `Pengguna "${userWithRoles?.getDataValue('name') || email}" (${userRoleNames}) login ke aplikasi`,
+            req,
         });
         res.status(200).json({
             success: true,
@@ -277,6 +298,19 @@ const updateProfile = async (req, res) => {
                 include: [
                     { model: models_1.Role, as: 'roles', attributes: ['id', 'name', 'villageId'] },
                 ],
+            });
+            (0, activityLogger_1.logActivity)({
+                villageId,
+                userId: uid,
+                userName: user.getDataValue('name'),
+                userEmail: user.getDataValue('email'),
+                userRole: 'WARGA',
+                action: 'JOIN_VILLAGE_PENDING',
+                targetId: uid,
+                targetName: user.getDataValue('name'),
+                description: `Warga "${user.getDataValue('name')}" mengajukan pendaftaran gabung ke desa "${village.getDataValue('name')}" (status: PENDING)`,
+                details: { noKK: user.getDataValue('noKK'), nik: user.getDataValue('nik'), phone: user.getDataValue('phoneNumber') },
+                req,
             });
             res.status(200).json({
                 success: true,
@@ -519,6 +553,19 @@ const claimAccount = async (req, res) => {
             include: [
                 { model: models_1.Role, as: 'roles', attributes: ['id', 'name', 'villageId'] },
             ],
+        });
+        (0, activityLogger_1.logActivity)({
+            villageId,
+            userId: uid,
+            userName: inputName || registeredName,
+            userEmail: email,
+            userRole: 'WARGA',
+            action: 'CLAIM_ACCOUNT',
+            targetId: uid,
+            targetName: inputName || registeredName,
+            description: `Warga "${inputName || registeredName}" menyinkronkan akun Google (${email}) dengan data NIK ${cleanNik}`,
+            details: { oldUid, newUid: uid, nik: cleanNik },
+            req,
         });
         res.json({
             success: true,

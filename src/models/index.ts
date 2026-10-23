@@ -412,4 +412,45 @@ WaBlastHistory.init({
 Village.hasMany(WaBlastHistory, { foreignKey: 'villageId', constraints: false });
 WaBlastHistory.belongsTo(Village, { foreignKey: 'villageId', constraints: false });
 
+// ---------------------------
+// 12. Model ActivityLog (Log Audit Aktivitas Pengguna)
+// ---------------------------
+export class ActivityLog extends Model {
+  declare id: string;
+  declare villageId: string | null;
+  declare userId: string | null;
+  declare userName: string | null;
+  declare userEmail: string | null;
+  declare userRole: string | null;
+  declare action: string;
+  declare targetId: string | null;
+  declare targetName: string | null;
+  declare description: string;
+  declare details: any;
+  declare ip: string | null;
+  declare userAgent: string | null;
+  declare createdAt: Date;
+  declare updatedAt: Date;
+}
+ActivityLog.init({
+  id: { type: DataTypes.STRING(128), primaryKey: true, defaultValue: DataTypes.UUIDV4 },
+  villageId: { type: DataTypes.STRING(128), allowNull: true },
+  userId: { type: DataTypes.STRING(128), allowNull: true },
+  userName: { type: DataTypes.STRING(255), allowNull: true },
+  userEmail: { type: DataTypes.STRING(255), allowNull: true },
+  userRole: { type: DataTypes.STRING(100), allowNull: true },
+  action: { type: DataTypes.STRING(100), allowNull: false },
+  targetId: { type: DataTypes.STRING(128), allowNull: true },
+  targetName: { type: DataTypes.STRING(255), allowNull: true },
+  description: { type: DataTypes.TEXT, allowNull: false },
+  details: { type: DataTypes.JSON, allowNull: true },
+  ip: { type: DataTypes.STRING(50), allowNull: true },
+  userAgent: { type: DataTypes.STRING(255), allowNull: true },
+}, { sequelize, modelName: 'activityLog', tableName: 'activity_logs', timestamps: true });
+
+// ActivityLog milik Village
+Village.hasMany(ActivityLog, { foreignKey: 'villageId', constraints: false });
+ActivityLog.belongsTo(Village, { foreignKey: 'villageId', constraints: false });
+
 export { sequelize };
+

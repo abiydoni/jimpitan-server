@@ -67,6 +67,10 @@ const connectDB = async () => {
             }
             catch (e) { }
             try {
+                await exports.sequelize.query("CREATE TABLE IF NOT EXISTS `activity_logs` (`id` VARCHAR(128) NOT NULL PRIMARY KEY, `villageId` VARCHAR(128) NULL, `userId` VARCHAR(128) NULL, `userName` VARCHAR(255) NULL, `userEmail` VARCHAR(255) NULL, `userRole` VARCHAR(100) NULL, `action` VARCHAR(100) NOT NULL, `targetId` VARCHAR(128) NULL, `targetName` VARCHAR(255) NULL, `description` TEXT NOT NULL, `details` JSON NULL, `ip` VARCHAR(50) NULL, `userAgent` VARCHAR(255) NULL, `createdAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, `updatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, INDEX `idx_act_village` (`villageId`), INDEX `idx_act_action` (`action`), INDEX `idx_act_created` (`createdAt`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+            }
+            catch (e) { }
+            try {
                 await exports.sequelize.query("INSERT INTO system_settings (`key`, `value`, `description`, `createdAt`, `updatedAt`) VALUES ('WA_GATEWAY_PROVIDER', 'appsbee', 'Provider WhatsApp Gateway (appsbee, fonnte, wablas, starsender, whacenter, generic)', NOW(), NOW()) ON DUPLICATE KEY UPDATE `value` = IF(`value` IS NULL OR `value` = '' OR `value` = 'fonnte', 'appsbee', `value`);");
             }
             catch (e) { }
