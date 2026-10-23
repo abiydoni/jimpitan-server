@@ -1446,9 +1446,12 @@ const removeFcmToken = async (req, res) => {
     }
 };
 exports.removeFcmToken = removeFcmToken;
+// Cooldown map untuk mencegah spam log saat warga membuka/tutup aplikasi dalam waktu singkat (cooldown 15 menit)
+const appOpenCooldownMap = new Map();
+const APP_OPEN_COOLDOWN_MS = 15 * 60 * 1000; // 15 menit
 const updateOnlineStatus = async (req, res) => {
     try {
-        const { uid } = req.params;
+        const uid = String(req.params.uid);
         const { isOnline } = req.body;
         const now = new Date();
         const updateData = {
@@ -1456,6 +1459,48 @@ const updateOnlineStatus = async (req, res) => {
             lastSeen: now
         };
         await models_1.User.update(updateData, { where: { uid } });
+        // Catat log jika status online = true (warga membuka aplikasi) dan sudah lewat masa cooldown 15 menit
+        if (isOnline) {
+            const lastLoggedTime = appOpenCooldownMap.get(uid) || 0;
+            const nowMs = Date.now();
+            if (nowMs - lastLoggedTime > APP_OPEN_COOLDOWN_MS) {
+                appOpenCooldownMap.set(uid, nowMs);
+                // Bersihkan entri lama jika map terlalu besar
+                if (appOpenCooldownMap.size > 5000) {
+                    for (const [k, timestamp] of appOpenCooldownMap.entries()) {
+                        if (nowMs - timestamp > APP_OPEN_COOLDOWN_MS) {
+                            appOpenCooldownMap.delete(k);
+                        }
+                    }
+                }
+                // Ambil info user secara non-blocking untuk detail log
+                models_1.User.findByPk(uid).then((user) => {
+                    if (user) {
+                        const userName = user.getDataValue('name') || user.getDataValue('email') || uid;
+                        const userVillageId = user.getDataValue('villageId');
+                        (0, activityLogger_1.logActivity)({
+                            villageId: userVillageId,
+                            userId: uid,
+                            userName,
+                            userEmail: user.getDataValue('email'),
+                            action: 'APP_OPEN',
+                            targetId: uid,
+                            targetName: userName,
+                            description: `Warga "${userName}" membuka aplikasi Jimpitan`,
+                            details: {
+                                uid,
+                                name: userName,
+                                villageId: userVillageId,
+                                lastSeen: now.toISOString(),
+                            },
+                            req,
+                        });
+                    }
+                }).catch((err) => {
+                    console.error('Error logging APP_OPEN:', err);
+                });
+            }
+        }
         res.json({ success: true });
     }
     catch (error) {
