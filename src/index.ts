@@ -56,6 +56,14 @@ app.get('/privacy', (req, res) => {
   res.sendFile(path.join(__dirname, '../src/views/privacy.html'));
 });
 
+// Endpoint untuk redirect Halaman Tutorial APK ke jimpitan-backend
+app.get('/tutorial', (req, res) => {
+  res.redirect('https://jimpitan-backend.appsbee.my.id/tutorial');
+});
+app.get('/panduan', (req, res) => {
+  res.redirect('https://jimpitan-backend.appsbee.my.id/tutorial');
+});
+
 // ==========================================
 // REQUEST LOGGER
 // ==========================================
