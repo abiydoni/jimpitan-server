@@ -219,7 +219,7 @@ const getMessages = async (req, res) => {
         }
         const messages = await models_1.ChatMessage.findAll({
             where: whereClause,
-            order: [['createdAt', 'DESC']],
+            order: [['createdAt', 'DESC'], ['id', 'DESC']],
             limit: 50, // 50 pesan terbaru cukup dan jauh lebih cepat
         });
         res.json({ success: true, data: messages.reverse() });

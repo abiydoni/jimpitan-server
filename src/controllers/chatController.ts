@@ -250,7 +250,7 @@ export const getMessages = async (req: AuthRequest, res: Response): Promise<void
 
     const messages = await Message.findAll({
       where: whereClause,
-      order: [['createdAt', 'DESC']],
+      order: [['createdAt', 'DESC'], ['id', 'DESC']],
       limit: 50, // 50 pesan terbaru cukup dan jauh lebih cepat
     });
 
