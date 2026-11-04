@@ -103,11 +103,25 @@ export const performAction = async (req: Request, res: Response): Promise<void> 
             
             // Beri jeda agar respon sempat terkirim ke klien
             setTimeout(() => {
-                // Sentuh file temporary agar nodemon memicu restart otomatis
-                const restartFile = path.join(__dirname, 'restart.tmp');
-                fs.writeFileSync(restartFile, new Date().toISOString());
-                // Nodemon akan otomatis merestart aplikasi saat mendeteksi perubahan file ini.
-                // Kita tidak perlu memanggil process.exit(0) karena itu akan menyebabkan status 'clean exit'.
+                try {
+                    // 1. Sentuh file temporary agar nodemon memicu restart otomatis di lokal
+                    const restartLocal = path.join(__dirname, 'restart.tmp');
+                    fs.writeFileSync(restartLocal, new Date().toISOString());
+
+                    // 2. Sentuh file tmp/restart.txt agar Phusion Passenger (cPanel) memicu restart otomatis
+                    const tmpDir = path.join(process.cwd(), 'tmp');
+                    if (!fs.existsSync(tmpDir)) {
+                        fs.mkdirSync(tmpDir, { recursive: true });
+                    }
+                    fs.writeFileSync(path.join(tmpDir, 'restart.txt'), new Date().toISOString());
+                } catch (err) {
+                    console.error('Error saat menyentuh restart files:', err);
+                }
+
+                // 3. Keluar dari proses agar Phusion Passenger / PM2 segera spawn instance baru
+                setTimeout(() => {
+                    process.exit(0);
+                }, 500);
             }, 1000);
             return;
         }

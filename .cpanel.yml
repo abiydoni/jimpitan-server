@@ -3,3 +3,5 @@ deployment:
   tasks:
     - export DEPLOYPATH=/home2/appsbeem/jimpitan-server.appsbee.my.id
     - /bin/cp -R * $DEPLOYPATH
+    - /bin/mkdir -p $DEPLOYPATH/tmp
+    - /bin/touch $DEPLOYPATH/tmp/restart.txt
