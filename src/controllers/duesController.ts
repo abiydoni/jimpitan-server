@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { DuesJournal, Tariff, Exemption, JimpitanHistory } from '../models';
 import { sendSyncNotification } from '../services/firebaseService';
 import { Op } from 'sequelize';
+import { sequelize } from '../config/database';
 
 // ==========================================
 // DUES JOURNALS (Iuran & Kas Umum)
@@ -93,9 +94,12 @@ export const createTariff = async (req: Request, res: Response): Promise<void> =
   try {
     const tariff = await Tariff.create(req.body);
     if (req.body.createdAt) {
-      (tariff as any).setDataValue('createdAt', new Date(req.body.createdAt));
-      (tariff as any).changed('createdAt', true);
-      await tariff.save();
+      const createdDate = new Date(req.body.createdAt);
+      await sequelize.query(
+        'UPDATE tariffs SET createdAt = :createdAt WHERE id = :id',
+        { replacements: { createdAt: createdDate, id: tariff.get('id') } }
+      );
+      (tariff as any).setDataValue('createdAt', createdDate);
     }
     await sendSyncNotification(req.body.villageId, 'REFRESH_TARIFFS');
     res.status(201).json({ success: true, data: tariff });
@@ -113,12 +117,16 @@ export const updateTariff = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
-    if (req.body.createdAt) {
-      (tariff as any).setDataValue('createdAt', new Date(req.body.createdAt));
-      (tariff as any).changed('createdAt', true);
-    }
-
     await tariff.update(req.body);
+
+    if (req.body.createdAt) {
+      const newCreatedAt = new Date(req.body.createdAt);
+      await sequelize.query(
+        'UPDATE tariffs SET createdAt = :createdAt WHERE id = :id',
+        { replacements: { createdAt: newCreatedAt, id } }
+      );
+      (tariff as any).setDataValue('createdAt', newCreatedAt);
+    }
     await sendSyncNotification((tariff as any).villageId, 'REFRESH_TARIFFS');
     res.json({ success: true, data: tariff });
   } catch (error: any) {

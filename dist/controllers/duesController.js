@@ -4,6 +4,7 @@ exports.deleteJimpitanHistory = exports.createJimpitanHistory = exports.getJimpi
 const models_1 = require("../models");
 const firebaseService_1 = require("../services/firebaseService");
 const sequelize_1 = require("sequelize");
+const database_1 = require("../config/database");
 // ==========================================
 // DUES JOURNALS (Iuran & Kas Umum)
 // ==========================================
@@ -90,9 +91,9 @@ const createTariff = async (req, res) => {
     try {
         const tariff = await models_1.Tariff.create(req.body);
         if (req.body.createdAt) {
-            tariff.setDataValue('createdAt', new Date(req.body.createdAt));
-            tariff.changed('createdAt', true);
-            await tariff.save();
+            const createdDate = new Date(req.body.createdAt);
+            await database_1.sequelize.query('UPDATE tariffs SET createdAt = :createdAt WHERE id = :id', { replacements: { createdAt: createdDate, id: tariff.get('id') } });
+            tariff.setDataValue('createdAt', createdDate);
         }
         await (0, firebaseService_1.sendSyncNotification)(req.body.villageId, 'REFRESH_TARIFFS');
         res.status(201).json({ success: true, data: tariff });
@@ -110,11 +111,12 @@ const updateTariff = async (req, res) => {
             res.status(404).json({ success: false, message: 'Tariff not found' });
             return;
         }
-        if (req.body.createdAt) {
-            tariff.setDataValue('createdAt', new Date(req.body.createdAt));
-            tariff.changed('createdAt', true);
-        }
         await tariff.update(req.body);
+        if (req.body.createdAt) {
+            const newCreatedAt = new Date(req.body.createdAt);
+            await database_1.sequelize.query('UPDATE tariffs SET createdAt = :createdAt WHERE id = :id', { replacements: { createdAt: newCreatedAt, id } });
+            tariff.setDataValue('createdAt', newCreatedAt);
+        }
         await (0, firebaseService_1.sendSyncNotification)(tariff.villageId, 'REFRESH_TARIFFS');
         res.json({ success: true, data: tariff });
     }
