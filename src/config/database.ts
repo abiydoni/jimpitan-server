@@ -45,6 +45,9 @@ export const connectDB = async () => {
       try { await sequelize.query("INSERT IGNORE INTO system_settings (`key`, `value`, `description`, `createdAt`, `updatedAt`) VALUES ('WA_DEFAULT_DELAY_SEC', '2', 'Delay jeda antar kirim pesan WhatsApp (detik)', NOW(), NOW());"); } catch (e) {}
       try { await sequelize.query("INSERT IGNORE INTO system_settings (`key`, `value`, `description`, `createdAt`, `updatedAt`) VALUES ('TAX_PERCENTAGE', '10', 'Persentase Pajak (PPN) Tagihan', NOW(), NOW());"); } catch (e) {}
       try {
+        await sequelize.query("UPDATE jimpitan_history SET timestamp = CONCAT(date, 'T', SUBSTRING_INDEX(timestamp, 'T', -1)) WHERE type = 'TAGIHAN' AND date IS NOT NULL AND timestamp NOT LIKE CONCAT(date, '%');");
+      } catch (e) {}
+      try {
         const [plansCount]: any = await sequelize.query("SELECT COUNT(*) as cnt FROM subscription_plans;");
         if (plansCount && plansCount[0] && (plansCount[0].cnt === 0 || plansCount[0].cnt === '0')) {
           await sequelize.query(`INSERT INTO subscription_plans (\`name\`, \`basePrice\`, \`pricePerKk\`, \`maxKk\`, \`features\`, \`durationMonths\`, \`durationUnit\`, \`createdAt\`, \`updatedAt\`) VALUES 

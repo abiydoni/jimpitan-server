@@ -223,7 +223,15 @@ const getJimpitanHistory = async (req, res) => {
             where: whereClause,
             order: [['timestamp', 'DESC']]
         });
-        res.json({ success: true, data: histories });
+        const sanitized = histories.map(h => {
+            const plain = h.toJSON ? h.toJSON() : h;
+            if (plain.type === 'TAGIHAN' && plain.date && plain.timestamp && !plain.timestamp.startsWith(plain.date)) {
+                const timePart = plain.timestamp.includes('T') ? plain.timestamp.split('T')[1] : '12:00:00.000';
+                plain.timestamp = `${plain.date}T${timePart}`;
+            }
+            return plain;
+        });
+        res.json({ success: true, data: sanitized });
     }
     catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -233,7 +241,7 @@ exports.getJimpitanHistory = getJimpitanHistory;
 const createJimpitanHistory = async (req, res) => {
     try {
         console.log('createJimpitanHistory called with:', req.body);
-        const { villageId, kkId, date, timestamp } = req.body;
+        const { villageId, kkId, date, timestamp, type } = req.body;
         if (villageId && kkId) {
             // Determine target date (YYYY-MM-DD)
             const targetDate = date || (timestamp ? String(timestamp).split('T')[0] : new Date().toISOString().slice(0, 10));
@@ -259,10 +267,19 @@ const createJimpitanHistory = async (req, res) => {
                 return;
             }
         }
+        const targetDate = req.body.date || (timestamp ? String(timestamp).split('T')[0] : new Date().toISOString().slice(0, 10));
+        let finalTimestamp = timestamp;
+        if (type === 'TAGIHAN' && targetDate) {
+            const timePart = timestamp && String(timestamp).includes('T')
+                ? String(timestamp).split('T')[1]
+                : '12:00:00.000';
+            finalTimestamp = `${targetDate}T${timePart}`;
+        }
         const payload = {
             id: req.body.id || `jimpitan_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
             ...req.body,
-            date: req.body.date || (timestamp ? String(timestamp).split('T')[0] : new Date().toISOString().slice(0, 10))
+            timestamp: finalTimestamp,
+            date: targetDate
         };
         const history = await models_1.JimpitanHistory.create(payload);
         await (0, firebaseService_1.sendSyncNotification)(req.body.villageId, 'REFRESH_JIMPITAN');

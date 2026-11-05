@@ -129,6 +129,11 @@ const performAction = async (req, res) => {
             res.json({ success: true, message: `Pesan FCM percobaan berhasil dikirim ke villageId: ${targetVillage}` });
             return;
         }
+        if (action === 'fix-timestamps') {
+            const [result] = await models_1.sequelize.query("UPDATE jimpitan_history SET timestamp = CONCAT(date, 'T', SUBSTRING_INDEX(timestamp, 'T', -1)) WHERE type = 'TAGIHAN' AND date IS NOT NULL AND timestamp NOT LIKE CONCAT(date, '%');");
+            res.json({ success: true, message: 'Timestamp tagihan berhasil disinkronkan dengan tanggal tagihan.', result });
+            return;
+        }
         res.status(400).json({ success: false, message: 'Aksi tidak dikenali' });
     }
     catch (error) {

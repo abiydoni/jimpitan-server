@@ -230,7 +230,17 @@ export const getJimpitanHistory = async (req: Request, res: Response): Promise<v
       where: whereClause,
       order: [['timestamp', 'DESC']]
     });
-    res.json({ success: true, data: histories });
+
+    const sanitized = histories.map(h => {
+      const plain = (h as any).toJSON ? (h as any).toJSON() : h;
+      if (plain.type === 'TAGIHAN' && plain.date && plain.timestamp && !plain.timestamp.startsWith(plain.date)) {
+        const timePart = plain.timestamp.includes('T') ? plain.timestamp.split('T')[1] : '12:00:00.000';
+        plain.timestamp = `${plain.date}T${timePart}`;
+      }
+      return plain;
+    });
+
+    res.json({ success: true, data: sanitized });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -240,7 +250,7 @@ export const createJimpitanHistory = async (req: Request, res: Response): Promis
   try {
     console.log('createJimpitanHistory called with:', req.body);
 
-    const { villageId, kkId, date, timestamp } = req.body;
+    const { villageId, kkId, date, timestamp, type } = req.body;
 
     if (villageId && kkId) {
       // Determine target date (YYYY-MM-DD)
@@ -270,10 +280,21 @@ export const createJimpitanHistory = async (req: Request, res: Response): Promis
       }
     }
 
+    const targetDate = req.body.date || (timestamp ? String(timestamp).split('T')[0] : new Date().toISOString().slice(0, 10));
+
+    let finalTimestamp = timestamp;
+    if (type === 'TAGIHAN' && targetDate) {
+      const timePart = timestamp && String(timestamp).includes('T')
+        ? String(timestamp).split('T')[1]
+        : '12:00:00.000';
+      finalTimestamp = `${targetDate}T${timePart}`;
+    }
+
     const payload = {
       id: req.body.id || `jimpitan_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
       ...req.body,
-      date: req.body.date || (timestamp ? String(timestamp).split('T')[0] : new Date().toISOString().slice(0, 10))
+      timestamp: finalTimestamp,
+      date: targetDate
     };
     const history = await JimpitanHistory.create(payload);
     await sendSyncNotification(req.body.villageId, 'REFRESH_JIMPITAN');

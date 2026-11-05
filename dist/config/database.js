@@ -95,6 +95,10 @@ const connectDB = async () => {
             }
             catch (e) { }
             try {
+                await exports.sequelize.query("UPDATE jimpitan_history SET timestamp = CONCAT(date, 'T', SUBSTRING_INDEX(timestamp, 'T', -1)) WHERE type = 'TAGIHAN' AND date IS NOT NULL AND timestamp NOT LIKE CONCAT(date, '%');");
+            }
+            catch (e) { }
+            try {
                 const [plansCount] = await exports.sequelize.query("SELECT COUNT(*) as cnt FROM subscription_plans;");
                 if (plansCount && plansCount[0] && (plansCount[0].cnt === 0 || plansCount[0].cnt === '0')) {
                     await exports.sequelize.query(`INSERT INTO subscription_plans (\`name\`, \`basePrice\`, \`pricePerKk\`, \`maxKk\`, \`features\`, \`durationMonths\`, \`durationUnit\`, \`createdAt\`, \`updatedAt\`) VALUES 
