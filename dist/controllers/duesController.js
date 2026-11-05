@@ -238,25 +238,31 @@ const createJimpitanHistory = async (req, res) => {
             // Determine target date (YYYY-MM-DD)
             const targetDate = date || (timestamp ? String(timestamp).split('T')[0] : new Date().toISOString().slice(0, 10));
             // Check if a record already exists for the same village, kkId, and date
+            // Pastikan hanya mencocokkan targetDate dengan kolom date, atau timestamp HANYA jika date bernilai null
+            // (Mencegah pembayaran tagihan hutang lama yang dicatat hari ini salah dianggap sebagai scan hari ini)
             const existing = await models_1.JimpitanHistory.findOne({
                 where: {
                     villageId,
                     kkId,
                     [sequelize_1.Op.or]: [
                         { date: targetDate },
-                        { timestamp: { [sequelize_1.Op.like]: `${targetDate}%` } }
+                        {
+                            date: null,
+                            timestamp: { [sequelize_1.Op.like]: `${targetDate}%` }
+                        }
                     ]
                 }
             });
             if (existing) {
                 console.log(`[Jimpitan] Duplicate scan ignored for kkId ${kkId} on ${targetDate}`);
-                res.status(201).json({ success: true, data: existing, isDuplicate: true, message: 'Data jimpitan sudah tercatat hari ini.' });
+                res.status(409).json({ success: false, data: existing, isDuplicate: true, message: 'Data jimpitan sudah tercatat hari ini.' });
                 return;
             }
         }
         const payload = {
             id: req.body.id || `jimpitan_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-            ...req.body
+            ...req.body,
+            date: req.body.date || (timestamp ? String(timestamp).split('T')[0] : new Date().toISOString().slice(0, 10))
         };
         const history = await models_1.JimpitanHistory.create(payload);
         await (0, firebaseService_1.sendSyncNotification)(req.body.villageId, 'REFRESH_JIMPITAN');

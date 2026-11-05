@@ -247,27 +247,33 @@ export const createJimpitanHistory = async (req: Request, res: Response): Promis
       const targetDate = date || (timestamp ? String(timestamp).split('T')[0] : new Date().toISOString().slice(0, 10));
 
       // Check if a record already exists for the same village, kkId, and date
+      // Pastikan hanya mencocokkan targetDate dengan kolom date, atau timestamp HANYA jika date bernilai null
+      // (Mencegah pembayaran tagihan hutang lama yang dicatat hari ini salah dianggap sebagai scan hari ini)
       const existing = await JimpitanHistory.findOne({
         where: {
           villageId,
           kkId,
           [Op.or]: [
             { date: targetDate },
-            { timestamp: { [Op.like]: `${targetDate}%` } }
+            { 
+              date: null,
+              timestamp: { [Op.like]: `${targetDate}%` } 
+            }
           ]
         }
       });
 
       if (existing) {
         console.log(`[Jimpitan] Duplicate scan ignored for kkId ${kkId} on ${targetDate}`);
-        res.status(201).json({ success: true, data: existing, isDuplicate: true, message: 'Data jimpitan sudah tercatat hari ini.' });
+        res.status(409).json({ success: false, data: existing, isDuplicate: true, message: 'Data jimpitan sudah tercatat hari ini.' });
         return;
       }
     }
 
     const payload = {
       id: req.body.id || `jimpitan_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-      ...req.body
+      ...req.body,
+      date: req.body.date || (timestamp ? String(timestamp).split('T')[0] : new Date().toISOString().slice(0, 10))
     };
     const history = await JimpitanHistory.create(payload);
     await sendSyncNotification(req.body.villageId, 'REFRESH_JIMPITAN');
