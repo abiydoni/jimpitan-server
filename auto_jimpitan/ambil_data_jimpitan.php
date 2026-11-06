@@ -118,29 +118,43 @@ try {
     $totalTerisi = $totalKk - $totalKosong;
 
     // =========================================================================
-    // 2. DATA PETUGAS JIMPITAN RONDA (HANYA DARI SCAN & MANUAL LAPANGAN)
+    // 2. DATA PETUGAS JIMPITAN RONDA (HANYA SCAN QR ASLI / REKOR SCAN)
     // =========================================================================
-    // TAGIHAN tidak dimasukkan sebagai petugas, nama petugas manual diambil dari scannedByName
+    // Hanya scan QR murni (type = 'JIMPITAN' atau kosong) yang dihitung per petugas ronda.
+    // Scan manual (type = 'MANUAL') tidak diikutkan dalam rekor scan petugas.
     $stmtPetugas = $pdo->prepare("
         SELECT 
             COALESCE(NULLIF(TRIM(r.scannedByName), ''), NULLIF(TRIM(u.name), ''), r.scannedBy, 'Petugas Ronda') AS nama_petugas,
-            COUNT(*) AS total_scan,
-            SUM(CASE WHEN r.type = 'MANUAL' THEN 1 ELSE 0 END) AS manual_count,
-            SUM(CASE WHEN r.type = 'JIMPITAN' OR r.type IS NULL OR r.type = '' THEN 1 ELSE 0 END) AS qr_count
+            COUNT(*) AS qr_scan_count
         FROM jimpitan_history r
         LEFT JOIN users u ON r.scannedBy = u.uid
         WHERE r.date = :targetDate 
           AND r.villageId = :villageId
-          AND (r.type IS NULL OR r.type = '' OR r.type != 'TAGIHAN')
+          AND (r.type = 'JIMPITAN' OR r.type IS NULL OR r.type = '')
         GROUP BY nama_petugas
-        HAVING total_scan > 0
-        ORDER BY total_scan DESC, nama_petugas ASC
+        HAVING qr_scan_count > 0
+        ORDER BY qr_scan_count DESC, nama_petugas ASC
     ");
     $stmtPetugas->execute([
         ':targetDate' => $targetDate,
         ':villageId'  => $villageId,
     ]);
     $dataPetugas = $stmtPetugas->fetchAll(PDO::FETCH_ASSOC);
+
+    // Ambil total scan manual untuk disatukan sebagai 'Scan Manual' (tanpa dipecah per nama)
+    $stmtManual = $pdo->prepare("
+        SELECT COUNT(id) AS total_manual
+        FROM jimpitan_history
+        WHERE date = :targetDate 
+          AND villageId = :villageId
+          AND type = 'MANUAL'
+    ");
+    $stmtManual->execute([
+        ':targetDate' => $targetDate,
+        ':villageId'  => $villageId,
+    ]);
+    $rowManual = $stmtManual->fetch(PDO::FETCH_ASSOC);
+    $totalManualScan = $rowManual ? (int)$rowManual['total_manual'] : $totalManualCount;
 
     // =========================================================================
     // 3. DATA PELUNASAN TAGIHAN JIMPITAN (NON-FISIK / VIA APLIKASI / BENDAHARA)
@@ -208,19 +222,24 @@ try {
         $pesan .= "✅ *Semua kotak terisi (100%).*\n";
     }
 
-    // 2. Siapa yang bertugas
+    // 2. Siapa yang bertugas (Rekor Scan QR) & Scan Manual
     $pesan .= "\n━━━━━━━━━━━━━━━━━━━━\n";
     $pesan .= "👤 *Petugas Jimpitan:*\n";
     if ($dataPetugas && count($dataPetugas) > 0) {
         $no_petugas = 1;
         foreach ($dataPetugas as $petugas) {
             $nama_u     = escapeMarkdown($petugas['nama_petugas']);
-            $total_scan = (int)$petugas['total_scan'];
-            $pesan .= $no_petugas . ". *" . $nama_u . "* (" . $total_scan . " rumah)\n";
+            $qr_count   = (int)$petugas['qr_scan_count'];
+            $pesan .= $no_petugas . ". *" . $nama_u . "* (" . $qr_count . " rumah)\n";
             $no_petugas++;
         }
-    } else {
+    } else if ($totalManualScan === 0) {
         $pesan .= "• Tidak ada data petugas ronda tercatat.\n";
+    }
+
+    // Scan manual disatukan jadi satu (tidak masuk rekor scan petugas)
+    if ($totalManualScan > 0) {
+        $pesan .= "• *Scan Manual* (" . $totalManualScan . " rumah)\n";
     }
 
     // Penutup & Link Download Play Store
